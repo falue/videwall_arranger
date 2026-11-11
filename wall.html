@@ -90,7 +90,6 @@ kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-si
   <button id="pattern" title="P: stand-in patterns over the dropped content too, in the previz">Pattern</button>
   <button id="layout" title="L: move / resize screens">Screen arrangement…</button>
   <button id="addScreen" hidden>+ screen</button>
-  <button id="view" title="R: show the rendered files on the wall" disabled>Rendered</button>
   <button id="hardware" title="video sources, video wall adapters and splitters there are" style="margin-left: auto">Available hardware…</button>
   <button id="materials" title="Esc: what the plan uses, with stock">Materials used…</button>
   <button id="cabling" title="the cabling plan, one page per video wall; export as PDF">Cabling…</button>
@@ -128,9 +127,9 @@ let selectedWall = null;   // video wall shown in the inspector
 let panel = null;          // 'hardware', 'render' or 'cabling' in the inspector, else the selection or the materials
 let stripButtons = [];     // clickable areas in the strip: walls, add, remove
 let stripHover = null;     // video wall under the mouse in the strip
-let layoutMode = false, view = 'live', playing = true, t = 0, last = performance.now();
+let layoutMode = false, playing = true, t = 0, last = performance.now();
 let viewBox = null;
-const players = {}, devCanvas = {}, renderVideos = {};
+const players = {}, devCanvas = {};
 
 const canvas = $('#wall'), ctx = canvas.getContext('2d');
 
@@ -331,15 +330,6 @@ function drawDevice(d) {
 }
 
 function deviceSource(d) {
-  if (view === 'rendered') {
-    const v = renderVideos[d];
-    if (v instanceof Image) return v.complete && v.naturalWidth ? { el: v, w: v.naturalWidth, h: v.naturalHeight } : null;
-    if (!v || v.readyState < 2) return null;
-    const dur = v.duration || 1, target = t % dur;
-    if (playing) { if (v.paused) v.play().catch(() => {}); if (!v.seeking && Math.abs(v.currentTime - target) > 0.3) v.currentTime = target; }
-    else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - target) > 0.02) v.currentTime = target; }
-    return { el: v, w: v.videoWidth, h: v.videoHeight };
-  }
   const c = drawDevice(d);
   return { el: c, w: c.width, h: c.height };
 }
@@ -463,8 +453,7 @@ function drawStrip(sources, w, h) {
   ctx.fillStyle = '#858d97'; ctx.fillText('Video streams to be rendered', w / 2, line + 7 * dpr);
   ctx.font = `${11 * dpr}px system-ui`; ctx.textAlign = 'start';
   for (let d = 1; d <= count; d++, x += tileW + gap) {
-    const file = view === 'rendered' ? renders.find(r => r.name.startsWith(`videowall${d}.`))?.name : 'live';
-    ctx.fillStyle = '#9aa3ad'; ctx.fillText(`video wall ${d}  ·  ${file ?? 'not rendered'}`, x, top + 4 * dpr);
+    ctx.fillStyle = '#9aa3ad'; ctx.fillText(`video wall ${d}`, x, top + 4 * dpr);
     if (count > 1) {
       ctx.fillText('×', x + tileW - 9 * dpr, top + 3 * dpr);
       stripButtons.push({ x: x + tileW - 16 * dpr, y: top, w: 16 * dpr, h: label, remove: d });
@@ -941,7 +930,7 @@ function removeMedia(name) {
 async function refreshMedia() {
   const r = await api('/api/media');
   const before = JSON.stringify(media);
-  media = r.media; setRenders(r.renders);
+  media = r.media; renders = r.renders;
   if (JSON.stringify(media) !== before) { renderLibrary(); renderInspector(); changed(); }
 }
 setInterval(() => { if (Object.values(media).some(m => m.proxyPending)) refreshMedia(); }, 3000);
@@ -1263,30 +1252,6 @@ const actions = {
 
 // ------------------------------------------------------------------ render job
 
-function setRenders(list) {
-  renders = list;
-  for (let d = 1; d <= wallCount(); d++) {
-    const r = list.find(x => x.name === `videowall${d}.mp4` || x.name === `videowall${d}.png`);
-    const url = r && `/render/${r.name}?v=${r.mtime}`;
-    if (!r) delete renderVideos[d];
-    else if (renderVideos[d]?.dataset.url !== url) {
-      const el = r.name.endsWith('.png') ? new Image() : makeVideo(url);
-      if (el instanceof Image) el.src = url; else el.loop = true;
-      el.dataset.url = url; renderVideos[d] = el;
-    }
-  }
-  const any = Object.keys(renderVideos).length > 0;
-  $('#view').disabled = !any;
-  if (!any && view === 'rendered') toggleView();
-}
-
-function toggleView() {
-  view = view === 'live' ? 'rendered' : 'live';
-  $('#view').classList.toggle('on', view === 'rendered');
-  for (const v of Object.values(renderVideos)) if (view === 'live') v.pause?.();
-  for (const p of Object.values(players)) if (view === 'rendered') { p.a.pause?.(); p.b?.pause(); }
-}
-
 async function startJob(path, body) {
   try { await api(path, body); } catch (e) { status(e.message, true); return; }
   const running = on => { rendering = on; $('#progress').style.display = on ? 'block' : 'none'; if ($('#renderGo')) $('#renderGo').disabled = on; showJob(); };
@@ -1297,7 +1262,7 @@ async function startJob(path, body) {
     status(j.message, j.state === 'error');
     if (j.state === 'running') return setTimeout(poll, 500);
     running(false);
-    setRenders(j.renders);
+    renders = j.renders;
   };
   poll();
 }
@@ -1373,7 +1338,7 @@ $('#library').addEventListener('drop', e => { e.preventDefault(); if (e.dataTran
 
 function togglePlay() {
   playing = !playing; $('#play').textContent = playing ? '❚❚' : '▶';
-  if (!playing) for (const v of [...Object.values(players).flatMap(p => [p.a, p.b]), ...Object.values(renderVideos)]) v?.pause?.();
+  if (!playing) for (const v of Object.values(players).flatMap(p => [p.a, p.b])) v?.pause?.();
 }
 function togglePattern() {
   settings().pattern = !settings().pattern; $('#pattern').classList.toggle('on', settings().pattern); changed();
@@ -1385,7 +1350,6 @@ function toggleLayout() {
 $('#play').onclick = togglePlay;
 $('#layout').onclick = toggleLayout;
 $('#pattern').onclick = togglePattern;
-$('#view').onclick = toggleView;
 $('#cabling').onclick = () => showPanel('cabling');
 $('#hardware').onclick = () => showPanel('hardware');
 $('#render').onclick = () => showPanel('render');
@@ -1403,7 +1367,6 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'l' || e.key === 'L') toggleLayout();
   else if (e.key === 'p' || e.key === 'P') togglePattern();
-  else if ((e.key === 'r' || e.key === 'R') && !$('#view').disabled) toggleView();
   else if (e.key === 'Escape') { selected = selectedWall = panel = null; renderInspector(); }
   else if ((e.key === 'Backspace' || e.key === 'Delete') && selectedScreen()) {
     e.preventDefault();
@@ -1417,7 +1380,7 @@ addEventListener('keydown', e => {
   const state = await api('/api/state');
   ({ project, media, plan } = state);
   $('#pattern').classList.toggle('on', !!settings().pattern);
-  setRenders(state.renders);
+  renders = state.renders;
   renderLibrary(); renderInspector(); showPlan();
   requestAnimationFrame(frame);
 })();

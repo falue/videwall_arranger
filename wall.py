@@ -677,11 +677,6 @@ def proxy_file(name):
     return send_from_directory(CONTENT / ".proxy", name + ".mp4")
 
 
-@app.get("/render/<path:name>")
-def render_file(name):
-    return send_from_directory(RENDER, name)
-
-
 def main():
     global CONTENT, RENDER, PROJECT_FILE
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

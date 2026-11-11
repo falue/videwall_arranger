@@ -404,7 +404,8 @@ function drawWall() {
   const focus = stripHover ?? selectedWall;   // its monitors stay bright, the others dim
   for (const s of project.screens) {
     const r = screenRect(s);
-    ctx.globalAlpha = focus && !s.src.startsWith(`${focus}.`) ? 0.5 : 1;
+    const fed = focus && s.src.startsWith(`${focus}.`);
+    ctx.globalAlpha = focus && !fed ? 0.5 : 1;
     ctx.fillStyle = '#050607';
     ctx.beginPath(); ctx.roundRect(r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b, b * 0.6); ctx.fill();
     ctx.strokeStyle = '#2a2e33'; ctx.lineWidth = dpr; ctx.stroke();
@@ -437,7 +438,7 @@ function drawWall() {
       ctx.fillText('⇔ stretch', badge.x + 5 * dpr, badge.y + badge.h / 2);
     }
 
-    if (s === hover || s.id === selected) {
+    if (s === hover || s.id === selected || fed) {
       ctx.strokeStyle = s === hover ? '#ffffff' : '#4cc2ff'; ctx.lineWidth = 2 * dpr;
       ctx.strokeRect(r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b);
     }

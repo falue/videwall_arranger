@@ -7,6 +7,8 @@ it into four monitors, splitters duplicate signals onto more monitors.
 
 > **NOTE**: ⚠ VIBE CODED ⚠
 
+![The page: media on the left, the wall with its monitors in the middle, the video streams below, materials on the right](screenshot.png)
+
 ```
 python3 wall.py        # opens http://localhost:8770
 ```
@@ -66,7 +68,9 @@ the inspector) renders the content cropped / padded to the monitor's aspect
 picture goes out as is and looks squeezed there. The previz shows both.
 
 ## Cabling plan
-`Cabling` shows the plan in place of the wall (drag / scroll pans, pinch or ⌘ / Ctrl + wheel
+Example: [Video wall cabling-example.pdf](Video%20wall%20cabling-example.pdf)
+
+`Cabling…` shows the plan in place of the wall (drag / scroll pans, pinch or ⌘ / Ctrl + wheel
 zooms, double-click fits), `Export PDF…` on the right prints it. One page per video wall:
 flowchart video source → splitter → adapter → splitter → monitors and a
 table of every cable. The video source feeds the adapter and the monitors on

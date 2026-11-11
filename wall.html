@@ -88,11 +88,11 @@ kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-si
   <input id="scrub" type="range" min="0" max="1" step="0.0001" value="0">
   <span id="time">0.00 / 0.00 s</span>
   <button id="pattern" title="P: stand-in patterns over the dropped content too, in the previz">Pattern</button>
-  <button id="layout" title="L: move / resize screens">Layout</button>
+  <button id="layout" title="L: move / resize screens">Screen arrangement…</button>
   <button id="addScreen" hidden>+ screen</button>
   <button id="view" title="R: show the rendered files on the wall" disabled>Rendered</button>
-  <button id="hardware" title="video sources, video wall adapters and splitters there are">Hardware</button>
-  <button id="materials" title="Esc: what the plan uses, with stock" style="margin-left: auto">Materials used…</button>
+  <button id="hardware" title="video sources, video wall adapters and splitters there are" style="margin-left: auto">Available hardware…</button>
+  <button id="materials" title="Esc: what the plan uses, with stock">Materials used…</button>
   <button id="cabling" title="the cabling plan, one page per video wall; export as PDF">Cabling…</button>
   <button id="render" title="render settings in the right column">Render videos…</button>
   <div id="job" hidden><div id="progress"><div></div></div><span id="status"></span></div>
@@ -997,12 +997,12 @@ function renderInspector() {
   if (panel === 'cabling') return renderCabling(box);
   if (selectedWall) {
     const wall = project.walls[selectedWall - 1];
-    const options = list => list.map((x, i) => `<option value="${i}">${i + 1} · ${esc(x.name)}</option>`).join('');   // numbered as in Hardware
+    const options = list => list.map((x, i) => `<option value="${i}">${i + 1} · ${esc(x.name)}</option>`).join('');   // numbered as in Available hardware
     box.innerHTML = `<h3>Video wall ${selectedWall}</h3>
       <div class="row"><label>Source</label><select data-bind="wall.source" data-number>${options(project.hardware.sources)}</select></div>
       <div class="row"><label>Video wall</label><select data-bind="wall.adapter" data-number title="video wall adapter">${options(project.hardware.adapters)}</select></div>
       ${field('Max video length', 'wall.length', 'number', 'min="0" step="0.5" title="seconds: all clips loop seamlessly if that fits in this, else the file is as long as its longest clip, at most this, and the others are cut off at the end. 0 = as long as its longest clip"')}
-      <p class="hint">Plays videowall${selectedWall}.*. Sources, adapters and splitters are defined under Hardware.</p>
+      <p class="hint">Plays videowall${selectedWall}.*. Sources, adapters and splitters are defined under Available hardware.</p>
       ${shortages().map(s => `<p class="warn">${esc(s)}</p>`).join('')}`;
     bindFields(box, { wall });
     return;

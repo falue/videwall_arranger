@@ -34,7 +34,7 @@ The old `_content/videowall-4x4-*.png` files are not used any more and are not l
 - `Space` play / pause, `⌫` clears a screen, `R` shows the rendered files on the wall.
 - The strip under the wall shows the stitched frame of each video wall: live, or the rendered file with `R`.
   `+ video wall` adds one, `×` removes one. Click a wall: its source, video wall adapter and max video length.
-- `Hardware`: the video sources (identical outputs, port type), video wall adapters (inputs, type per output)
+- `Available hardware…`: the video sources (identical outputs, port type), video wall adapters (inputs, type per output)
   and splitters (outputs, in / out type) there are, each with `count` = how many of them you own. Each wall
   uses one of its source and adapter, a source feeding monitors directly one more; too few shows in red.
 - `Render videos…`: the render settings in the right column, `Render` or `Enter` starts. "same format for
@@ -45,7 +45,7 @@ The old `_content/videowall-4x4-*.png` files are not used any more and are not l
   has a stock field (`-1` = unlimited), what is missing shows in colour.
 - Monitors have input types (inspector chips, HDMI by default). Ports: HDMI, Micro HDMI, DisplayPort, VGA,
   DVI-I, DVI-D, Scart, RCA, TV antenna.
-- `L` layout mode: drag screens to move, the corner to resize, `⌫` deletes,
+- `Screen arrangement…` (`L`): drag screens to move, the corner to resize, `⌫` deletes,
   `+ screen` adds. Source and aspect are set in the inspector.
 
 ## Sources

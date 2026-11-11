@@ -131,6 +131,14 @@ def make_proxy(name: str) -> None:
         _proxy_jobs.discard(name)
 
 
+def proxy_ok(proxy: Path, source: Path, duration: float) -> bool:
+    """The proxy exists, is not older than its source and as long (a copied or cut off one is made again)."""
+    try:
+        return proxy.stat().st_mtime >= source.stat().st_mtime and abs(probe(proxy)["duration"] - duration) < 1
+    except (OSError, subprocess.CalledProcessError, KeyError, IndexError):
+        return False
+
+
 def list_media() -> dict:
     media = {}
     for path in sorted(CONTENT.iterdir(), key=lambda p: p.name.lower()):
@@ -145,7 +153,7 @@ def list_media() -> dict:
         info["url"] = f"/media/{path.name}"
         if kind == "video":
             proxy = proxy_path(path.name)
-            if proxy.exists() and proxy.stat().st_mtime >= path.stat().st_mtime:
+            if proxy_ok(proxy, path, info["duration"]):
                 info["url"] = f"/proxy/{path.name}"
             else:
                 info["proxyPending"] = True

@@ -128,6 +128,7 @@ let selected = null, hover = null, under = null, drag = null, scrub = null;  // 
 let selectedWall = null;   // video wall shown in the inspector
 let panel = null;          // 'hardware', 'render' or 'cabling' in the inspector, else the selection or the materials
 let stripButtons = [];     // clickable areas in the strip: walls, add, remove
+let stripHover = null;     // video wall under the mouse in the strip
 let layoutMode = false, view = 'live', playing = true, t = 0, last = performance.now();
 let viewBox = null;
 const players = {}, devCanvas = {}, renderVideos = {};
@@ -400,8 +401,10 @@ function drawWall() {
   for (let d = 1; d <= wallCount(); d++) sources[d] = deviceSource(d);
 
   const b = BEZEL * viewBox.scale;
+  const focus = stripHover ?? selectedWall;   // its monitors stay bright, the others dim
   for (const s of project.screens) {
     const r = screenRect(s);
+    ctx.globalAlpha = focus && !s.src.startsWith(`${focus}.`) ? 0.5 : 1;
     ctx.fillStyle = '#050607';
     ctx.beginPath(); ctx.roundRect(r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b, b * 0.6); ctx.fill();
     ctx.strokeStyle = '#2a2e33'; ctx.lineWidth = dpr; ctx.stroke();
@@ -442,6 +445,7 @@ function drawWall() {
       ctx.fillStyle = '#4cc2ff'; ctx.fillRect(r.x + r.w + b - 8 * dpr, r.y + r.h + b - 8 * dpr, 8 * dpr, 8 * dpr);
     }
   }
+  ctx.globalAlpha = 1;
   drawStrip(sources, w, h);
 }
 
@@ -1307,7 +1311,7 @@ function canvasPoint(e) {
 
 canvas.addEventListener('mousedown', e => {
   const [px, py] = canvasPoint(e), s = hit(px, py);
-  const button = stripButtons.find(b => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h);
+  const button = stripButton(px, py);
   if (button?.add) return addWall();
   if (button?.remove) return removeWall(button.remove);
   if (button?.wall) { selectedWall = button.wall; selected = panel = null; renderInspector(); return; }
@@ -1322,8 +1326,12 @@ canvas.addEventListener('mousedown', e => {
   drag = { kind: !layoutMode ? 'swap' : corner ? 'resize' : 'move', s, px, py, x: s.x, y: s.y, w: s.w, moved: false };
 });
 
-canvas.addEventListener('mousemove', e => { under = hit(...canvasPoint(e)); });
-canvas.addEventListener('mouseleave', () => { under = null; });
+const stripButton = (px, py) => stripButtons.find(b => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h);
+canvas.addEventListener('mousemove', e => {
+  const [px, py] = canvasPoint(e);
+  under = hit(px, py); stripHover = stripButton(px, py)?.wall ?? null;
+});
+canvas.addEventListener('mouseleave', () => { under = stripHover = null; });
 
 addEventListener('mousemove', e => {
   if (!drag) return;

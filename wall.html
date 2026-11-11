@@ -457,12 +457,20 @@ function drawWall() {
       ctx.strokeStyle = s === hover ? '#ffffff' : '#4cc2ff'; ctx.lineWidth = 2 * dpr;
       ctx.strokeRect(r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b);
     }
+    if (isQuad(twin) && s.src === `${twin.split('.')[0]}.full`) outlineQuad(twin.split('.')[1], r.x, r.y, r.w, r.h);
     if (layoutMode) {
       ctx.fillStyle = '#4cc2ff'; ctx.fillRect(r.x + r.w + b - 8 * dpr, r.y + r.h + b - 8 * dpr, 8 * dpr, 8 * dpr);
     }
   }
   ctx.globalAlpha = 1;
   drawStrip(sources, w, h);
+}
+
+// Blue outline of quadrant q within the frame (x, y, w, h): where the selected monitor's picture sits.
+function outlineQuad(q, x, y, w, h) {
+  const i = QUADS.indexOf(q), dpr = devicePixelRatio;
+  ctx.strokeStyle = '#4cc2ff'; ctx.lineWidth = 2 * dpr;
+  ctx.strokeRect(x + i % 2 * w / 2 + dpr, y + Math.floor(i / 2) * h / 2 + dpr, w / 2 - 2 * dpr, h / 2 - 2 * dpr);
 }
 
 // The stitched frame of every video wall, as it goes to its adapter.
@@ -489,6 +497,8 @@ function drawStrip(sources, w, h) {
     if (src) ctx.drawImage(src.el, 0, 0, src.w, src.h, x, y, tileW, tileH);
     ctx.strokeStyle = d === selectedWall ? '#4cc2ff' : '#2d3238'; ctx.lineWidth = (d === selectedWall ? 2 : 1) * dpr;
     ctx.strokeRect(x, y, tileW, tileH);
+    const sel = selectedScreen()?.src;
+    if (isQuad(sel) && sel.startsWith(`${d}.`)) outlineQuad(sel.split('.')[1], x, y, tileW, tileH);
     stripButtons.push({ x, y, w: tileW, h: tileH, wall: d });
   }
 

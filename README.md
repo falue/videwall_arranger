@@ -31,7 +31,8 @@ The old `_content/videowall-4x4-*.png` files are not used any more and are not l
 ## Use
 - Drag media onto a screen. Drag a screen onto another one to swap content. `×` on a media item takes it off the list (the file stays, dropping it again brings it back).
 - Click a screen: in / out (drag the bar), loop mode, fit.
-- `Space` play / pause, `⌫` clears a screen.
+- `Space` play / pause, `⌫` clears a screen. `⌘ / Ctrl + Z` undo, `⌘ / Ctrl + Shift + Z` or `+ Y` redo
+  (this session only).
 - The strip under the wall shows the stitched frame of each video wall, as it will be rendered.
   `+ video wall` adds one, `×` removes one. Click a wall: its source, video wall adapter and max video length.
 - `Available hardware…`: the video sources (identical outputs, port type), video wall adapters (inputs, type per output)

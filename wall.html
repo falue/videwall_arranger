@@ -189,6 +189,7 @@ let saveTimer;
 function changed() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 250); }
 async function save() {
   clearTimeout(saveTimer);
+  commit();
   plan = (await api('/api/state', project)).plan;
   patternVersion++;
   showPlan();
@@ -199,6 +200,25 @@ async function save() {
 // Second header row: render progress and the last message, shown while there is one.
 const showJob = () => { $('#job').hidden = !rendering && !$('#status').textContent; };
 function status(text, bad = false) { const el = $('#status'); el.textContent = text; el.classList.toggle('bad', bad); showJob(); }
+
+// Undo / redo for this session: a snapshot of the project per save (edits within the save delay are one step).
+const undoStack = [], redoStack = [];
+let saved = '';   // the project as last saved, JSON
+function commit() {
+  const json = JSON.stringify(project);
+  if (json === saved) return;
+  undoStack.push(saved); redoStack.length = 0; saved = json;
+  if (undoStack.length > 200) undoStack.shift();
+}
+function step(from, to) {
+  commit();
+  if (!from.length) return;
+  to.push(saved); saved = from.pop(); project = JSON.parse(saved);
+  if (!selectedScreen()) selected = null;
+  if (selectedWall > wallCount()) selectedWall = null;
+  $('#pattern').classList.toggle('on', !!settings().pattern);
+  renderLibrary(); renderInspector(); save();
+}
 
 // ------------------------------------------------------------------ players
 
@@ -1363,7 +1383,12 @@ $('#addScreen').onclick = () => {
 };
 
 addEventListener('keydown', e => {
-  if (e.target.closest('input, select')) return;
+  if (e.target.closest('input, select')) return;   // their own text undo
+  if (e.metaKey || e.ctrlKey) {   // Cmd / Ctrl + Z undo, + Shift + Z or + Y redo, other combos stay the browser's
+    const key = e.key.toLowerCase();
+    if (key === 'z' || key === 'y') { e.preventDefault(); key === 'y' || e.shiftKey ? step(redoStack, undoStack) : step(undoStack, redoStack); }
+    return;
+  }
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'l' || e.key === 'L') toggleLayout();
   else if (e.key === 'p' || e.key === 'P') togglePattern();
@@ -1379,6 +1404,7 @@ addEventListener('keydown', e => {
 (async () => {
   const state = await api('/api/state');
   ({ project, media, plan } = state);
+  saved = JSON.stringify(project);
   $('#pattern').classList.toggle('on', !!settings().pattern);
   renders = state.renders;
   renderLibrary(); renderInspector(); showPlan();

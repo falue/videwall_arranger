@@ -416,6 +416,7 @@ function drawWall() {
 
   const b = BEZEL * viewBox.scale;
   const focus = stripHover ?? selectedWall;   // its monitors stay bright, the others dim
+  const twin = selectedScreen()?.src;   // monitors with the same signal as the selected one are outlined too
   for (const s of project.screens) {
     const r = screenRect(s);
     const fed = focus && s.src.startsWith(`${focus}.`);
@@ -452,7 +453,7 @@ function drawWall() {
       ctx.fillText('⇔ stretch', badge.x + 5 * dpr, badge.y + badge.h / 2);
     }
 
-    if (s === hover || s.id === selected || fed) {
+    if (s === hover || s.id === selected || fed || (twin !== 'none' && s.src === twin)) {
       ctx.strokeStyle = s === hover ? '#ffffff' : '#4cc2ff'; ctx.lineWidth = 2 * dpr;
       ctx.strokeRect(r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b);
     }

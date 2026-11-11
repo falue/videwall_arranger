@@ -447,15 +447,17 @@ function drawWall() {
 
 // The stitched frame of every video wall, as it goes to its adapter.
 function drawStrip(sources, w, h) {
-  const dpr = devicePixelRatio, m = 20 * dpr, label = 18 * dpr, gap = 16 * dpr;
-  const top = h * (1 - STRIP), count = wallCount(), aspect = settings().width / settings().height;
+  const dpr = devicePixelRatio, m = 20 * dpr, label = 18 * dpr, gap = 16 * dpr, title = 24 * dpr;
+  const line = h * (1 - STRIP), top = line + title, count = wallCount(), aspect = settings().width / settings().height;
   const tileH = Math.min(h - top - label - m, (w - 2 * m - gap * count) / (count + 0.35) / aspect);
   const tileW = tileH * aspect, addW = tileW * 0.35, y = top + label;
   let x = (w - count * tileW - addW - count * gap) / 2;
   stripButtons = [];
 
-  ctx.fillStyle = '#2d3238'; ctx.fillRect(m, top, w - 2 * m, dpr);
-  ctx.font = `${11 * dpr}px system-ui`; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#2d3238'; ctx.fillRect(m, line, w - 2 * m, dpr);
+  ctx.font = `600 ${12 * dpr}px system-ui`; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#858d97'; ctx.fillText('Video streams to be rendered', w / 2, line + 7 * dpr);
+  ctx.font = `${11 * dpr}px system-ui`; ctx.textAlign = 'start';
   for (let d = 1; d <= count; d++, x += tileW + gap) {
     const file = view === 'rendered' ? renders.find(r => r.name.startsWith(`videowall${d}.`))?.name : 'live';
     ctx.fillStyle = '#9aa3ad'; ctx.fillText(`video wall ${d}  ·  ${file ?? 'not rendered'}`, x, top + 4 * dpr);

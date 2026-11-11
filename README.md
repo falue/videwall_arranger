@@ -19,7 +19,7 @@ path | what
 `_content/` | media; drop files on the page to add them. Images are in git (stand-ins for videos to come), videos and `.proxy/` (small previz copies) are not
 `wall.json` | the arrangement (recipe), saved automatically on every change
 `_render/videowall<N>.mp4` | the rendered files, one per video source. `.png` if all content of that wall is still images
-`_render/wall_preview.mp4` | the video wall files placed on the whole wall, made with every render (`.png` if all of them are)
+`_render/wall_preview.mp4` | the video wall files placed on the whole wall, made with every render unless "Render the wall preview" is off (`.png` if all of them are)
 `burnin.py` | separate CLI: clock / text burn-in and noise, see below
 
 ## Stand-ins

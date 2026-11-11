@@ -118,7 +118,7 @@ const PATTERN_OPACITY = 0.5; // same as in wall.py
 const PORT_TYPES = ['HDMI', 'Micro HDMI', 'DisplayPort', 'VGA', 'DVI-I', 'DVI-D', 'Scart', 'RCA', 'TV antenna'];
 const DEFAULTS = {
   'clip.mode': 'loop', 'clip.xfade': 3, 'clip.fit': 'cover', 'clip.in': 0,
-  'screen.inputs': ['HDMI'], 's.sameFormat': true, 'wall.length': 0, 'wall.source': 0, 'wall.adapter': 0,
+  'screen.inputs': ['HDMI'], 's.sameFormat': true, 's.renderPreview': true, 'wall.length': 0, 'wall.source': 0, 'wall.adapter': 0,
 };
 
 let project, media = {}, plan = null, renders = [];
@@ -1104,7 +1104,8 @@ function renderSettings(box) {
   let html = `<h3>Render videos</h3>
     <label class="check"><input type="checkbox" data-bind="s.sameFormat"> Same format for all outputs</label>
     ${same ? formatRows('all') : ''}
-    <label class="check" title="stand-in patterns at 50 % over the content, for testing"><input type="checkbox" data-bind="s.renderPattern"> Render the stand-in patterns too</label>`;
+    <label class="check" title="stand-in patterns at 50 % over the content, for testing"><input type="checkbox" data-bind="s.renderPattern"> Render the stand-in patterns too</label>
+    <label class="check" title="_render/wall_preview.mp4: the rendered files placed on the whole wall"><input type="checkbox" data-bind="s.renderPreview"> Render the wall preview</label>`;
   project.walls.forEach((wall, k) => {
     if (same) return;
     formats[`w${k}`] = wall.format ??= common();

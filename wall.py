@@ -421,7 +421,8 @@ def render_wall(project: dict) -> None:
     devices = range(1, len(project["walls"]) + 1)
     keys = [f"{d}.{q}" for d in devices for q in QUADS if f"{d}.{q}" in project["clips"]]
     direct_used = [i for i in range(len(sources)) if any(screen["src"] == f"src.{i}" for screen in project["screens"])]
-    steps, step = len(keys) + len(devices) + len(direct_used) + 1, 0
+    with_preview = s.get("renderPreview", True)
+    steps, step = len(keys) + len(devices) + len(direct_used) + with_preview, 0
 
     units = {}
     for key in keys:
@@ -505,18 +506,19 @@ def render_wall(project: dict) -> None:
         direct[key] = target
         step += 1
 
-    JOB["message"] = "rendering wall preview"
-    feeds = {str(d): o for d, o in outputs.items()} | direct
-    fps = s["fps"]
-    preview = save_output(
-        preview_args(project, feeds, fps), "wall_preview", all(media_kind(f) == "image" for f in feeds.values()),
-        round(max(w["seconds"] for w in plan["walls"].values()) * fps), fps, 23, "veryfast", work, step, steps,
-    )
+    if with_preview:
+        JOB["message"] = "rendering wall preview"
+        feeds = {str(d): o for d, o in outputs.items()} | direct
+        fps = s["fps"]
+        made.append(save_output(
+            preview_args(project, feeds, fps), "wall_preview", all(media_kind(f) == "image" for f in feeds.values()),
+            round(max(w["seconds"] for w in plan["walls"].values()) * fps), fps, 23, "veryfast", work, step, steps,
+        ).name)
 
     shutil.rmtree(work, ignore_errors=True)
     JOB["message"] = "done: " + ", ".join(
         [o.name + ("" if o.suffix == ".png" else f" ({plan['walls'][d]['seconds']:.2f} s)") for d, o in outputs.items()]
-        + made + [preview.name]
+        + made
     )
 
 

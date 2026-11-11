@@ -382,6 +382,11 @@ def pattern_image(project: dict, key: str, size: tuple = (960, 540)) -> Image.Im
     draw.line([(width, 0), (0, height)], fill="black", width=2)
     # Thick frame in the inverted colour, so every edge of the picture is plain to see.
     draw.rectangle([0, 0, width - 1, height - 1], outline=tuple(255 - c for c in colour), width=round(16 * k))
+    # Square and circle around the letter: on the monitor they are only square and round if the aspect is right.
+    half = 135 * k
+    box = [width / 2 - half, height / 2 - half, width / 2 + half, height / 2 + half]
+    draw.rectangle(box, outline="black", width=round(6 * k))
+    draw.ellipse(box, outline="black", width=round(6 * k))
 
     def text(line: str, y: float, size: int) -> None:
         font = ImageFont.load_default(size=size)

@@ -186,6 +186,8 @@ def load_project() -> dict:
                 wall.pop(key, None)
     for item in project["hardware"]["sources"] + project["hardware"]["adapters"]:
         item.setdefault("count", 1)   # how many of them there are, older files had none
+    # Older files could put a clip on a wall's whole frame ("1.full"); a full monitor only mirrors the wall now.
+    project["clips"] = {key: clip for key, clip in project["clips"].items() if not key.endswith(".full")}
     cap = project["settings"].pop("maxLength", 0)   # older files: one max length for all walls
     for wall in project["walls"]:
         if not wall.get("length"):
@@ -404,7 +406,7 @@ def render_wall(project: dict) -> None:
     work.mkdir(parents=True)
 
     devices = range(1, len(project["walls"]) + 1)
-    keys = [f"{d}.{q}" for d in devices for q in (*QUADS, "full") if f"{d}.{q}" in project["clips"]]
+    keys = [f"{d}.{q}" for d in devices for q in QUADS if f"{d}.{q}" in project["clips"]]
     direct_used = [i for i in range(len(sources)) if any(screen["src"] == f"src.{i}" for screen in project["screens"])]
     steps, step = len(keys) + len(devices) + len(direct_used) + 1, 0
 
@@ -414,10 +416,9 @@ def render_wall(project: dict) -> None:
         f = formats[device]
         JOB["message"] = f"preparing {key} ({clip['file']})"
         units[key] = work / f"{key}.mp4"
-        scale = 4 if key.endswith(".full") else 2   # quarters: whole frame or one quadrant, even sizes
         wall_frames = plan["walls"][device]["frames"]
-        run_ffmpeg(
-            unit_args(clip, media[clip["file"]], plan["clips"][key], f["width"] // 4 * scale, f["height"] // 4 * scale,
+        run_ffmpeg(   # one quadrant, even sizes
+            unit_args(clip, media[clip["file"]], plan["clips"][key], f["width"] // 4 * 2, f["height"] // 4 * 2,
                       quad_aspect(project, key), f["fps"], wall_frames, units[key]),
             plan["clips"][key].get("unit", wall_frames), step, steps,
         )
@@ -430,28 +431,16 @@ def render_wall(project: dict) -> None:
         fps, width, height = f["fps"], f["width"] // 4 * 2, f["height"] // 4 * 2
         inputs, graph = [], []
 
-        # Whole-device content shows wherever a quadrant has no clip of its own.
-        full = f"{device}.full"
-        from_full = [q for q in QUADS if f"{device}.{q}" not in units] if full in units else []
-        if from_full:
-            inputs += ["-stream_loop", "-1", "-i", str(units[full])]
-            graph.append(f"[{inputs.count('-i') - 1}:v]fps={fps},setsar=1,split={len(from_full)}"
-                         + "".join(f"[f{q}]" for q in from_full))
-
-        for index, quad in enumerate(QUADS):
+        for quad in QUADS:   # its clip, else its stand-in
             key = f"{device}.{quad}"
             pattern = work / f"pattern_{key}.png"
             pattern_image(project, key, (width, height)).save(pattern)
-            dropped = key in units or quad in from_full
-            if quad in from_full:
-                x, y = index % 2 * width, index // 2 * height
-                graph.append(f"[f{quad}]crop={width}:{height}:{x}:{y}[{quad}]")
+            dropped = key in units
+            if dropped:
+                inputs += ["-stream_loop", "-1", "-i", str(units[key])]
             else:
-                if key in units:
-                    inputs += ["-stream_loop", "-1", "-i", str(units[key])]
-                else:
-                    inputs += ["-loop", "1", "-i", str(pattern)]
-                graph.append(f"[{inputs.count('-i') - 1}:v]scale={width}:{height},fps={fps},setsar=1[{quad}]")
+                inputs += ["-loop", "1", "-i", str(pattern)]
+            graph.append(f"[{inputs.count('-i') - 1}:v]scale={width}:{height},fps={fps},setsar=1[{quad}]")
             if dropped and s.get("renderPattern"):
                 inputs += ["-loop", "1", "-i", str(pattern)]
                 graph.append(f"[{inputs.count('-i') - 1}:v]scale={width}:{height},format=rgba,"

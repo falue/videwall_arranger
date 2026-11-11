@@ -147,7 +147,7 @@ async function api(path, body) {
 
 const ratio = s => { const [a, b] = String(s).split(':').map(Number); return b ? a / b : a || 16 / 9; };
 const isQuad = src => /^\d+\.(tl|tr|bl|br)$/.test(src);
-const takesClip = src => /^(\d+|src)\./.test(src);   // video wall outputs and direct sources
+const takesClip = src => isQuad(src) || src.startsWith('src.');   // video wall outputs and direct sources
 // File name a direct source's file is copied to, same as direct_name() in wall.py.
 const directName = i => project.hardware.sources[i].name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `source-${+i + 1}`;
 const clipKey = s => s.src;
@@ -337,11 +337,10 @@ function drawDevice(d) {
   if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
   const g = c.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
-  if (project.clips[`${d}.full`]) drawClip(g, `${d}.full`, 0, 0, W, H);
   QUADS.forEach((q, i) => {
     const x = i % 2 * W / 2, y = Math.floor(i / 2) * H / 2;
-    const dropped = project.clips[`${d}.${q}`] || project.clips[`${d}.full`], pattern = patternImage(`${d}.${q}`);
-    if (project.clips[`${d}.${q}`]) drawClip(g, `${d}.${q}`, x, y, W / 2, H / 2);
+    const dropped = project.clips[`${d}.${q}`], pattern = patternImage(`${d}.${q}`);
+    if (dropped) drawClip(g, `${d}.${q}`, x, y, W / 2, H / 2);
     if (pattern && (!dropped || settings().pattern)) {
       g.globalAlpha = dropped ? PATTERN_OPACITY : 1; g.drawImage(pattern, x, y, W / 2, H / 2); g.globalAlpha = 1;
     }
@@ -531,8 +530,7 @@ function link(from, inputs) {
 
 function monitorNote(s) {
   const [d, q] = s.src.split('.'), clip = project.clips[s.src];
-  const content = clip ? clip.file : d === 'src' ? 'its own content' : q === 'full' ? 'whole frame of the wall'
-    : project.clips[`${d}.full`]?.file ?? 'stand-in';
+  const content = clip ? clip.file : d === 'src' ? 'its own content' : q === 'full' ? 'whole frame of the wall' : 'stand-in';
   return `${s.aspect}${s.stretch ? ', stretch' : ''} · ${content}`;
 }
 
@@ -966,7 +964,11 @@ async function upload(files) {
 }
 
 function assign(screen, name) {
-  if (!takesClip(screen.src)) { status(`${screen.name} is external, set its source first`, true); return; }
+  if (!takesClip(screen.src)) {
+    status(screen.src === 'none' ? `${screen.name} is external, set its source first`
+      : `${screen.name} mirrors the whole video wall, drop on its outputs`, true);
+    return;
+  }
   const m = media[name], old = project.clips[screen.src] ?? {};
   project.clips[screen.src] = {
     mode: 'loop', xfade: 3, fit: 'cover', ...old,
@@ -1038,7 +1040,7 @@ function renderInspector() {
     ${chips('Inputs', 'screen.inputs')}`;
 
   if (screen.src.endsWith('.full'))
-    html += `<p class="hint">Mirrors the whole output of video wall ${screen.src[0]}. A clip here fills all its quadrants that have no clip of their own.</p>`;
+    html += `<p class="hint">Mirrors the whole output of video wall ${screen.src.split('.')[0]}: its four outputs put together.</p>`;
 
   if (clip) {
     html += `<h3>Content</h3>

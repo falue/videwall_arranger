@@ -53,7 +53,7 @@ The old `_content/videowall-4x4-*.png` files are not used any more and are not l
 source | meaning
 --- | ---
 `wall 1 · out 1` ... `wall 2 · out 4` | an output of a video wall's adapter: 1 top left, 2 top right, 3 bottom left, 4 bottom right
-`wall 1 · full` | the whole output (a monitor behind a video splitter). A clip here fills every quadrant of that wall without its own clip, e.g. a ready made 2x2 file
+`wall 1 · full` | the whole output (a monitor behind a video splitter): mirrors the four outputs put together, takes no media of its own
 `direct · <source>` | hangs directly on a video source from the hardware list that plays its own content (e.g. the Raspberry Pi of 85_gegensprechanlage). Media dropped on it is copied unchanged to `_render/<source-name>.*` (or re-encoded, see `Render videos…`), without media its stand-in goes there as `.png`; own page in the cabling pdf
 `external / off` | not connected (broken monitor)
 

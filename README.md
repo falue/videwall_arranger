@@ -5,6 +5,8 @@ video source (at NINE a Raspberry Pi) feeding a 2x2 video wall adapter (wall 1
 = A B C D, wall 2 = E F G H). Every source plays one file, the adapter splits
 it into four monitors, splitters duplicate signals onto more monitors.
 
+> **NOTE**: ⚠ VIBE CODED ⚠
+
 ```
 python3 wall.py        # opens http://localhost:8770
 ```

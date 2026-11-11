@@ -1,0 +1,1296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Video Wall</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #121417; --panel: #1b1e22; --line: #2d3238; --text: #d8dde3;
+  --dim: #858d97; --accent: #4cc2ff; --warn: #ffb83d; --bad: #ff5b4f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; height: 100vh; overflow: hidden; background: var(--bg); color: var(--text);
+  font: 12px/1.45 -apple-system, system-ui, sans-serif;
+  display: grid; grid-template: auto 1fr / 210px 1fr 290px;
+}
+header {
+  grid-column: 1 / 4; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+  padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+header label { color: var(--dim); }
+input, select, button {
+  font: inherit; color: var(--text); background: #0f1113; border: 1px solid var(--line);
+  border-radius: 4px; padding: 3px 5px;
+}
+input[type=number] { width: 58px; }
+input[type=range] { padding: 0; vertical-align: middle; }
+button { cursor: pointer; background: #262a30; }
+button:hover { border-color: var(--accent); }
+button.on { background: var(--accent); color: #000; }
+button:disabled { opacity: .4; cursor: default; }
+#scrub { width: 180px; }
+#time { font-variant-numeric: tabular-nums; min-width: 92px; }
+#planText { color: var(--dim); }
+#planText.warn, .warn { color: var(--warn); }
+#progress { width: 110px; height: 6px; background: #0f1113; border-radius: 3px; overflow: hidden; display: none; }
+#progress div { height: 100%; width: 0; background: var(--accent); }
+#status { color: var(--dim); max-width: 380px; white-space: pre-wrap; }
+#status.bad { color: var(--bad); }
+aside { overflow: auto; padding: 10px; background: var(--panel); }
+#library { border-right: 1px solid var(--line); }
+#inspector { border-left: 1px solid var(--line); }
+h3 { margin: 14px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+h3:first-child { margin-top: 0; }
+.item {
+  display: flex; gap: 8px; align-items: center; padding: 4px; margin-bottom: 4px;
+  border-radius: 4px; cursor: grab; border: 1px solid transparent;
+}
+.item:hover { border-color: var(--line); background: #22262b; }
+.item video, .item img { width: 64px; height: 36px; object-fit: cover; background: #000; border-radius: 2px; flex: none; }
+.item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.item small { color: var(--dim); }
+.item { position: relative; }
+.item .del { position: absolute; right: 2px; top: 2px; padding: 0 6px; visibility: hidden; }
+.item:hover .del { visibility: visible; }
+.mat { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0; }
+.mat small { display: block; color: var(--dim); }
+.mat b { white-space: nowrap; font-weight: 500; }
+.mat .stock { width: 48px; margin-left: auto; }
+.hw { border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; margin-bottom: 6px; }
+.hint { color: var(--dim); }
+#stage { position: relative; min-width: 0; }
+#wall { position: absolute; inset: 0; width: 100%; height: 100%; }
+#stage.dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.row { display: flex; align-items: center; gap: 6px; margin: 5px 0; }
+.row > label { width: 70px; color: var(--dim); flex: none; }
+.row input:not([type=checkbox]), .row select { flex: 1; min-width: 0; }
+.track { position: relative; height: 22px; background: #0f1113; border: 1px solid var(--line); border-radius: 4px; margin: 6px 0; cursor: pointer; }
+.track .sel { position: absolute; top: 0; bottom: 0; background: #4cc2ff33; border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.track .head { position: absolute; top: -2px; bottom: -2px; width: 1px; background: #fff; pointer-events: none; }
+.file { display: flex; gap: 6px; align-items: center; }
+.file span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+.chips button { padding: 1px 6px; font-size: 11px; }
+kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <button id="play" title="Space">❚❚</button>
+  <input id="scrub" type="range" min="0" max="1" step="0.0001" value="0">
+  <span id="time">0.00 / 0.00 s</span>
+  <span id="planText"></span>
+  <span>
+    <label>max</label> <input type="number" data-setting="maxLength" min="0" step="1"
+      title="seconds: if all clips can't loop seamlessly within this, a wall is as long as its longest clip and the others are cut off at the end. 0 = always as long as its longest clip">
+  </span>
+  <span>
+    <label>fps</label> <input type="number" data-setting="fps" min="1" max="60">
+    <label>out</label> <select data-setting="size"><option>1920x1080</option><option>1280x720</option><option>3840x2160</option></select>
+    <label>crf</label> <input type="number" data-setting="crf" min="0" max="51"
+      title="quality of the rendered videos (x264 constant rate factor): lower = better and bigger files. 0 lossless, 18 looks lossless, 23 ffmpeg default, 51 worst">
+  </span>
+  <button id="pattern" title="P: stand-in patterns over the dropped content too (previz and render)">Pattern</button>
+  <button id="layout" title="L: move / resize screens">Layout</button>
+  <button id="addScreen" hidden>+ screen</button>
+  <button id="view" title="R: show the rendered files on the wall" disabled>Rendered</button>
+  <button id="hardware" title="video sources, video wall adapters and splitters there are">Hardware</button>
+  <div id="progress"><div></div></div>
+  <span id="status"></span>
+  <button id="cabling" title="printable cabling plan (save as PDF), one page per video wall" style="margin-left: auto">Cabling pdf…</button>
+  <button id="render">Render videos…</button>
+</header>
+
+<aside id="library">
+  <h3>Media</h3>
+  <div id="mediaList"></div>
+  <p class="hint">Drag onto a screen. Drop files from Finder here or onto a screen to add them to _content.</p>
+  <p class="hint">Drag a screen onto another to swap. <kbd>⌫</kbd> clears, <kbd>Space</kbd> plays, <kbd>L</kbd> layout.</p>
+</aside>
+
+<main id="stage"><canvas id="wall"></canvas></main>
+
+<aside id="inspector"></aside>
+
+<script>
+const $ = s => document.querySelector(s);
+const QUADS = ['tl', 'tr', 'bl', 'br'];
+const BEZEL = 2.5;          // world units around each picture
+const PREVIEW_H = 540;      // device canvas height in the previz
+const STRIP = 0.28;         // share of the stage height for the stitched device frames
+const PATTERN_OPACITY = 0.5; // same as in wall.py
+const PORT_TYPES = ['HDMI', 'Micro HDMI', 'DisplayPort', 'VGA', 'DVI-I', 'DVI-D', 'Scart', 'RCA', 'TV antenna'];
+const DEFAULTS = {
+  'clip.mode': 'loop', 'clip.xfade': 1, 'clip.fit': 'cover', 'clip.in': 0,
+  'screen.inputs': ['HDMI'], 'wall.length': 0, 'wall.source': 0, 'wall.adapter': 0,
+};
+
+let project, media = {}, plan = null, renders = [];
+let selected = null, hover = null, under = null, drag = null, scrub = null;  // under: screen below the mouse
+let selectedWall = null;   // video wall shown in the inspector
+let showHardware = false;  // hardware list shown in the inspector
+let stripButtons = [];     // clickable areas in the strip: walls, add, remove
+let layoutMode = false, view = 'live', playing = true, t = 0, last = performance.now();
+let viewBox = null;
+const players = {}, devCanvas = {}, renderVideos = {};
+
+const canvas = $('#wall'), ctx = canvas.getContext('2d');
+
+// ------------------------------------------------------------------ helpers
+
+async function api(path, body) {
+  const options = body === undefined ? {} : body instanceof FormData
+    ? { method: 'POST', body }
+    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  const response = await fetch(path, options);
+  const json = await response.json();
+  if (!response.ok) throw new Error(json.error || response.statusText);
+  return json;
+}
+
+const ratio = s => { const [a, b] = String(s).split(':').map(Number); return b ? a / b : a || 16 / 9; };
+const isQuad = src => /^\d+\.(tl|tr|bl|br)$/.test(src);
+const takesClip = src => /^(\d+|src)\./.test(src);   // video wall outputs and direct sources
+// File name a direct source's file is copied to, same as direct_name() in wall.py.
+const directName = i => project.hardware.sources[i].name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `source-${+i + 1}`;
+const clipKey = s => s.src;
+const settings = () => project.settings;
+const wallCount = () => project.walls.length;
+const fps = () => settings().fps;
+// Each wall loops on its own; the scrub bar covers the longest one.
+const total = () => plan ? Math.max(...Object.values(plan.walls).map(w => w.seconds)) : 10;
+
+// Same as quad_aspect() in wall.py.
+function quadAspect(key) {
+  const screen = project.screens.find(s => s.src === key && s.stretch);
+  return screen ? ratio(screen.aspect) : settings().width / settings().height;
+}
+
+// Toggle on screens that squeeze their quadrant: pre-stretch the content for it.
+// Shown when on, or while the mouse is over the screen.
+function stretchBadge(s) {
+  if (!(s.stretch || s === under) || !isQuad(s.src) || Math.abs(ratio(s.aspect) - settings().width / settings().height) < 0.01) return null;
+  const r = screenRect(s), dpr = devicePixelRatio;
+  ctx.font = `${11 * dpr}px system-ui`;
+  const w = ctx.measureText('⇔ stretch').width + 10 * dpr;
+  return { x: r.x + r.w - w - 4 * dpr, y: r.y + 4 * dpr, w, h: 18 * dpr };
+}
+
+function getPath(root, path) {
+  const value = path.split('.').slice(1).reduce((o, k) => o?.[k], root);
+  return value ?? DEFAULTS[path];
+}
+function setPath(root, path, value) {
+  const keys = path.split('.').slice(1);
+  const parent = keys.slice(0, -1).reduce((o, k) => (o[k] ??= {}), root);
+  parent[keys.at(-1)] = value;
+}
+
+let saveTimer;
+function changed() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 250); }
+async function save() {
+  clearTimeout(saveTimer);
+  plan = (await api('/api/state', project)).plan;
+  patternVersion++;
+  showPlan();
+  if (!selected && !selectedWall && !showHardware) renderInspector();
+}
+
+function status(text, bad = false) { const el = $('#status'); el.textContent = text; el.classList.toggle('bad', bad); }
+
+// ------------------------------------------------------------------ players
+
+function makeVideo(url) {
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+  return v;
+}
+
+function player(key, clip) {
+  const m = media[clip.file];
+  if (!m) return null;
+  let p = players[key];
+  if (!p || p.url !== m.url) {
+    p?.a?.pause?.(); p?.b?.pause?.();
+    p = players[key] = { url: m.url, image: m.kind === 'image' };
+    if (p.image) { p.a = new Image(); p.a.src = m.url; }
+    else { p.a = makeVideo(m.url); p.b = makeVideo(m.url); }
+  }
+  return p;
+}
+
+// Source positions for output time `time`, same math as the renderer.
+function clipTimes(key, clip, time) {
+  const pc = plan?.clips?.[key];
+  if (!pc || pc.image) return null;
+  // The wall's file restarts after its length, the clip after its unit within it; always at its own speed.
+  const F = fps(), N = pc.source, unit = pc.unit, start = clip.in ?? 0, rate = 1;
+  const k = time % plan.walls[key.split('.')[0]].seconds * F % unit;
+  const mode = clip.mode ?? 'loop';
+  if (mode === 'pingpong') {
+    return k < N ? { main: start + k / F, rate } : { main: start + (2 * N - 2 - k) / F, rate: -rate };
+  }
+  if (mode === 'xfade') {
+    const X = pc.xfade, fadeAt = N - 2 * X;
+    const times = { main: start + (X + k) / F, rate };
+    if (k >= fadeAt) Object.assign(times, { second: start + (k - fadeAt) / F, mix: (k - fadeAt) / X });
+    return times;
+  }
+  return { main: start + k / F, rate };
+}
+
+function sync(el, target, rate) {
+  if (el.readyState < 1) return;
+  if (!playing || rate <= 0) {
+    if (!el.paused) el.pause();
+    if (!el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = target;
+    return;
+  }
+  const r = Math.min(16, Math.max(0.0625, rate));
+  if (el.playbackRate !== r) el.playbackRate = r;
+  if (el.paused) el.play().catch(() => {});
+  if (!el.seeking && Math.abs(el.currentTime - target) > 0.3) el.currentTime = target;
+}
+
+// Picture cropped / padded to the monitor's aspect, then squashed into w x h.
+function drawFit(g, el, fit, w, h, aspect) {
+  const sw = el.videoWidth || el.naturalWidth, sh = el.videoHeight || el.naturalHeight;
+  if (!sw) return;
+  const c = sw / sh;
+  if (fit === 'stretch') g.drawImage(el, 0, 0, w, h);
+  else if (fit === 'contain') {
+    if (c > aspect) { const dh = h * aspect / c; g.drawImage(el, 0, (h - dh) / 2, w, dh); }
+    else { const dw = w * c / aspect; g.drawImage(el, (w - dw) / 2, 0, dw, h); }
+  } else if (c > aspect) { const cw = sh * aspect; g.drawImage(el, (sw - cw) / 2, 0, cw, sh, 0, 0, w, h); }
+  else { const ch = sw / aspect; g.drawImage(el, 0, (sh - ch) / 2, sw, ch, 0, 0, w, h); }
+}
+
+function drawClip(g, key, x, y, w, h) {
+  const clip = project.clips[key];
+  const p = clip && player(key, clip);
+  if (!p) return;
+  const aspect = quadAspect(key), fit = clip.fit ?? 'cover';
+  g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.translate(x, y);
+  g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+  if (p.image) drawFit(g, p.a, fit, w, h, aspect);
+  else {
+    const times = scrub?.key === key ? { main: scrub.time, rate: 0 } : clipTimes(key, clip, t);
+    if (times) {
+      sync(p.a, times.main, times.rate);
+      if (p.a.readyState >= 2) drawFit(g, p.a, fit, w, h, aspect);
+      if (times.second !== undefined) {
+        sync(p.b, times.second, times.rate);
+        if (p.b.readyState >= 2) { g.globalAlpha = times.mix; drawFit(g, p.b, fit, w, h, aspect); g.globalAlpha = 1; }
+      } else if (clip.mode === 'xfade') sync(p.b, clip.in ?? 0, 0);
+    }
+  }
+  g.restore();
+}
+
+// Stand-in of a wall output or direct source, drawn by the server from the saved project
+// (pattern_image() in wall.py). The previous one stays until the new one has loaded.
+const patternImages = {};
+let patternVersion = 0;   // bumped after each save
+function patternImage(key) {
+  const url = `/pattern/${key}?v=${patternVersion}`, old = patternImages[key];
+  if (old?.url !== url) patternImages[key] = { url, img: Object.assign(new Image(), { src: url }), shown: old?.shown };
+  const entry = patternImages[key];
+  if (entry.img.complete && entry.img.naturalWidth) entry.shown = entry.img;
+  return entry.shown ?? null;
+}
+
+// Adapter outputs are numbered 1 - 4: top left, top right, bottom left, bottom right.
+const outNumber = q => QUADS.indexOf(q) + 1;
+const srcLabel = src => {
+  const [d, q] = src.split('.');
+  if (src === 'none') return 'external';
+  if (d === 'src') return `direct · ${project.hardware.sources[q]?.name}`;
+  return `wall ${d} · ${q === 'full' ? 'full' : `out ${outNumber(q)}`}`;
+};
+
+// The full output frame of a video wall, like the renderer makes it, small.
+function drawDevice(d) {
+  const H = PREVIEW_H, W = Math.round(H * settings().width / settings().height);
+  const c = devCanvas[d] ??= document.createElement('canvas');
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  if (project.clips[`${d}.full`]) drawClip(g, `${d}.full`, 0, 0, W, H);
+  QUADS.forEach((q, i) => {
+    const x = i % 2 * W / 2, y = Math.floor(i / 2) * H / 2;
+    const dropped = project.clips[`${d}.${q}`] || project.clips[`${d}.full`], pattern = patternImage(`${d}.${q}`);
+    if (project.clips[`${d}.${q}`]) drawClip(g, `${d}.${q}`, x, y, W / 2, H / 2);
+    if (pattern && (!dropped || settings().pattern)) {
+      g.globalAlpha = dropped ? PATTERN_OPACITY : 1; g.drawImage(pattern, x, y, W / 2, H / 2); g.globalAlpha = 1;
+    }
+  });
+  return c;
+}
+
+function deviceSource(d) {
+  if (view === 'rendered') {
+    const v = renderVideos[d];
+    if (v instanceof Image) return v.complete && v.naturalWidth ? { el: v, w: v.naturalWidth, h: v.naturalHeight } : null;
+    if (!v || v.readyState < 2) return null;
+    const dur = v.duration || 1, target = t % dur;
+    if (playing) { if (v.paused) v.play().catch(() => {}); if (!v.seeking && Math.abs(v.currentTime - target) > 0.3) v.currentTime = target; }
+    else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - target) > 0.02) v.currentTime = target; }
+    return { el: v, w: v.videoWidth, h: v.videoHeight };
+  }
+  const c = drawDevice(d);
+  return { el: c, w: c.width, h: c.height };
+}
+
+// ------------------------------------------------------------------ wall
+
+// A monitor on a direct source: the whole file, looping at its own length, fitted as the player shows it.
+function drawDirect(s, r) {
+  ctx.fillStyle = '#000'; ctx.fillRect(r.x, r.y, r.w, r.h);
+  const clip = project.clips[s.src], p = clip && player(s.src, clip);
+  if (!p) {
+    const pattern = patternImage(s.src);
+    if (pattern) ctx.drawImage(pattern, r.x, r.y, r.w, r.h);
+    return;
+  }
+  if (!p.image) {
+    if (p.a.duration) sync(p.a, t % p.a.duration, 1);
+    if (p.a.readyState < 2) return;
+  }
+  ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip(); ctx.translate(r.x, r.y);
+  drawFit(ctx, p.a, clip.fit ?? 'cover', r.w, r.h, ratio(s.aspect));
+  ctx.restore();
+}
+
+const screenH = s => s.w / ratio(s.aspect);
+
+function updateViewBox() {
+  if (drag && drag.kind !== 'swap') return;
+  const xs = project.screens.flatMap(s => [s.x - BEZEL, s.x + s.w + BEZEL]);
+  const ys = project.screens.flatMap(s => [s.y - BEZEL, s.y + screenH(s) + BEZEL + 5]);
+  const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
+  const m = 20 * devicePixelRatio, height = canvas.height * (1 - STRIP);
+  const scale = Math.min((canvas.width - 2 * m) / bw, (height - 2 * m) / bh);
+  viewBox = { scale, ox: (canvas.width - bw * scale) / 2 - bx * scale, oy: (height - bh * scale) / 2 - by * scale };
+}
+
+function screenRect(s) {
+  const { scale, ox, oy } = viewBox;
+  return { x: ox + s.x * scale, y: oy + s.y * scale, w: s.w * scale, h: screenH(s) * scale };
+}
+
+function hit(px, py) {
+  for (const s of [...project.screens].reverse()) {
+    const r = screenRect(s), b = BEZEL * viewBox.scale;
+    if (px >= r.x - b && px <= r.x + r.w + b && py >= r.y - b && py <= r.y + r.h + b) return s;
+  }
+  return null;
+}
+
+function drawWall() {
+  const dpr = devicePixelRatio;
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  updateViewBox();
+  ctx.fillStyle = '#121417'; ctx.fillRect(0, 0, w, h);
+
+  const sources = {};
+  for (let d = 1; d <= wallCount(); d++) sources[d] = deviceSource(d);
+
+  const b = BEZEL * viewBox.scale;
+  for (const s of project.screens) {
+    const r = screenRect(s);
+    ctx.fillStyle = '#050607';
+    ctx.beginPath(); ctx.roundRect(r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b, b * 0.6); ctx.fill();
+    ctx.strokeStyle = '#2a2e33'; ctx.lineWidth = dpr; ctx.stroke();
+
+    const [d, q] = s.src.split('.');
+    const src = sources[d];
+    if (d === 'src') drawDirect(s, r);
+    else if (src && q) {
+      if (q === 'full') ctx.drawImage(src.el, 0, 0, src.w, src.h, r.x, r.y, r.w, r.h);
+      else {
+        const i = QUADS.indexOf(q);
+        // One pixel in, so smoothing doesn't pull in the neighbouring quadrant.
+        ctx.drawImage(src.el, i % 2 * src.w / 2 + 1, Math.floor(i / 2) * src.h / 2 + 1, src.w / 2 - 2, src.h / 2 - 2, r.x, r.y, r.w, r.h);
+      }
+    } else {
+      ctx.fillStyle = '#0b0c0e'; ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+
+    ctx.font = `${11 * dpr}px system-ui`; ctx.textBaseline = 'top';
+    ctx.fillStyle = s.src === 'none' ? '#5c636b' : '#9aa3ad';
+    const label = `${s.name}  ·  ${srcLabel(s.src)}${project.clips[s.src] ? '  ·  ' + project.clips[s.src].file : ''}`;
+    ctx.save(); ctx.beginPath(); ctx.rect(r.x - b, r.y + r.h + b, r.w + 2 * b, 16 * dpr); ctx.clip();
+    ctx.fillText(label, r.x - b, r.y + r.h + b + 2 * dpr); ctx.restore();
+
+    const badge = stretchBadge(s);
+    if (badge) {
+      ctx.fillStyle = s.stretch ? '#4cc2ff' : 'rgba(0,0,0,0.65)';
+      ctx.beginPath(); ctx.roundRect(badge.x, badge.y, badge.w, badge.h, 3 * dpr); ctx.fill();
+      ctx.fillStyle = s.stretch ? '#000' : '#d8dde3'; ctx.textBaseline = 'middle';
+      ctx.fillText('⇔ stretch', badge.x + 5 * dpr, badge.y + badge.h / 2);
+    }
+
+    if (s === hover || s.id === selected) {
+      ctx.strokeStyle = s === hover ? '#ffffff' : '#4cc2ff'; ctx.lineWidth = 2 * dpr;
+      ctx.strokeRect(r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b);
+    }
+    if (layoutMode) {
+      ctx.fillStyle = '#4cc2ff'; ctx.fillRect(r.x + r.w + b - 8 * dpr, r.y + r.h + b - 8 * dpr, 8 * dpr, 8 * dpr);
+    }
+  }
+  drawStrip(sources, w, h);
+}
+
+// The stitched frame of every video wall, as it goes to its adapter.
+function drawStrip(sources, w, h) {
+  const dpr = devicePixelRatio, m = 20 * dpr, label = 18 * dpr, gap = 16 * dpr;
+  const top = h * (1 - STRIP), count = wallCount(), aspect = settings().width / settings().height;
+  const tileH = Math.min(h - top - label - m, (w - 2 * m - gap * count) / (count + 0.35) / aspect);
+  const tileW = tileH * aspect, addW = tileW * 0.35, y = top + label;
+  let x = (w - count * tileW - addW - count * gap) / 2;
+  stripButtons = [];
+
+  ctx.fillStyle = '#2d3238'; ctx.fillRect(m, top, w - 2 * m, dpr);
+  ctx.font = `${11 * dpr}px system-ui`; ctx.textBaseline = 'top';
+  for (let d = 1; d <= count; d++, x += tileW + gap) {
+    const file = view === 'rendered' ? renders.find(r => r.name.startsWith(`videowall${d}.`))?.name : 'live';
+    ctx.fillStyle = '#9aa3ad'; ctx.fillText(`video wall ${d}  ·  ${file ?? 'not rendered'}`, x, top + 4 * dpr);
+    if (count > 1) {
+      ctx.fillText('×', x + tileW - 9 * dpr, top + 3 * dpr);
+      stripButtons.push({ x: x + tileW - 16 * dpr, y: top, w: 16 * dpr, h: label, remove: d });
+    }
+    ctx.fillStyle = '#000'; ctx.fillRect(x, y, tileW, tileH);
+    const src = sources[d];
+    if (src) ctx.drawImage(src.el, 0, 0, src.w, src.h, x, y, tileW, tileH);
+    ctx.strokeStyle = d === selectedWall ? '#4cc2ff' : '#2d3238'; ctx.lineWidth = (d === selectedWall ? 2 : 1) * dpr;
+    ctx.strokeRect(x, y, tileW, tileH);
+    stripButtons.push({ x, y, w: tileW, h: tileH, wall: d });
+  }
+
+  ctx.lineWidth = dpr; ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = '#4a5058';
+  ctx.strokeRect(x, y, addW, tileH); ctx.setLineDash([]);
+  ctx.fillStyle = '#9aa3ad'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `${22 * dpr}px system-ui`; ctx.fillText('+', x + addW / 2, y + tileH / 2 - 8 * dpr);
+  ctx.font = `${11 * dpr}px system-ui`; ctx.fillText('video wall', x + addW / 2, y + tileH / 2 + 14 * dpr);
+  ctx.textAlign = 'start';
+  stripButtons.push({ x, y, w: addW, h: tileH, add: true });
+}
+
+// Removing a wall turns its monitors external, the walls after it move up one number.
+function removeWall(d) {
+  const mine = key => key.startsWith(`${d}.`);
+  const used = Object.keys(project.clips).some(mine) || project.screens.some(s => mine(s.src));
+  if (used && !confirm(`Remove video wall ${d}? Its content is dropped and its monitors become external.`)) return;
+  const shift = src => { const [w, q] = src.split('.'); return +w > d ? `${w - 1}.${q}` : src; };
+  for (const s of project.screens) s.src = mine(s.src) ? 'none' : shift(s.src);
+  project.clips = Object.fromEntries(Object.entries(project.clips).filter(([k]) => !mine(k)).map(([k, c]) => [shift(k), c]));
+  for (const k in players) { players[k].a.pause?.(); players[k].b?.pause(); delete players[k]; }
+  project.walls.splice(d - 1, 1);
+  selectedWall = null;
+  renderInspector(); changed();
+}
+
+function addWall() { project.walls.push({}); selectedWall = wallCount(); selected = null; renderInspector(); changed(); }
+
+// ------------------------------------------------------------------ cabling plan
+
+const QUAD_NAMES = { tl: 'top left', tr: 'top right', bl: 'bottom left', br: 'bottom right' };
+const DIGITAL = new Set(['HDMI', 'Micro HDMI', 'DVI-D', 'DVI-I']);
+const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// A plain cable or plug adapter does it, else an active converter is needed.
+const passive = (from, to) => from === to || (DIGITAL.has(from) && DIGITAL.has(to))
+  || (from === 'DVI-I' && to === 'VGA') || (from === 'DisplayPort' && DIGITAL.has(to))
+  || (from === 'Scart' && to === 'RCA') || (from === 'RCA' && to === 'Scart');
+
+// Signal of type `from` into a device with `inputs`: the input used and the adapter needed, if any.
+function link(from, inputs) {
+  if (inputs.includes(from)) return { input: from, adapter: '' };
+  const input = inputs.find(i => passive(from, i)) ?? inputs[0];
+  return { input, adapter: `${from} → ${input}${passive(from, input) ? '' : ' (active converter)'}` };
+}
+
+function monitorNote(s) {
+  const [d, q] = s.src.split('.'), clip = project.clips[s.src];
+  const content = clip ? clip.file : d === 'src' ? 'its own content' : q === 'full' ? 'whole frame of the wall'
+    : project.clips[`${d}.full`]?.file ?? 'stand-in';
+  return `${s.aspect}${s.stretch ? ', stretch' : ''} · ${content}`;
+}
+
+const monitorKind = s => `${s.aspect} · ${getPath(s, 'screen.inputs').join(' / ')}`;
+const cableName = port => `${port.split(' · ')[1]} cable`;   // port: "out 1 · HDMI"
+
+const sourceOf = d => project.hardware.sources[project.walls[d - 1].source ?? 0] ?? project.hardware.sources[0];
+const adapterOf = d => project.hardware.adapters[project.walls[d - 1].adapter ?? 0] ?? project.hardware.adapters[0];
+
+// Splitters come from the hardware list, shared by all walls: the smallest free one with enough outputs.
+const splitterNote = sp => sp.extra ? `${sp.name}, one more (not in the hardware list)` : sp.name;
+
+function takeSplitter(pool, n, label) {
+  const fits = pool.filter(s => s.outs >= n).sort((a, b) => a.outs - b.outs);
+  const free = fits.find(s => s.left > 0);
+  if (free) { free.left--; return { ...free, label }; }
+  // None left: assume one more of the smallest that fits, or a plain 1×n splitter.
+  const extra = fits[0] ?? { name: `HDMI splitter 1x${n}`, outs: n, input: 'HDMI', output: 'HDMI' };
+  return { ...extra, label, extra: true };
+}
+
+// Boxes and cables of a cabling flowchart; cables and adapters short in stock in red.
+function flowchart(BW, BH, short) {
+  const wires = [], parts = [], badges = [];   // drawn in this order: boxes cover wires, adapter badges on top
+  const areas = [];   // boxes and texts, see overlaps()
+  const cut = (text, n) => text.length > n ? text.slice(0, n - 1) + '…' : text;
+  const box = (x, y, h, title, note = '', style = '') => areas.push({ x, y, w: BW, h }) && parts.push(
+    `<rect x="${x}" y="${y}" width="${BW}" height="${h}" rx="5" fill="${style === 'off' ? '#fff' : '#f2f2f2'}" stroke="${style === 'off' ? '#aaa' : style === 'warn' ? '#c00' : '#000'}" stroke-width="${style === 'warn' ? 2 : 1}"${style === 'off' ? ' stroke-dasharray="4 3"' : ''}/>`,
+    `<text x="${x + 8}" y="${y + (note ? 16 : h / 2 + 4)}" font-weight="600" fill="${style === 'off' ? '#888' : '#000'}">${esc(cut(title, 20))}</text>`,
+    note ? `<text x="${x + 8}" y="${y + 31}" font-size="10.5" fill="#444">${esc(cut(note, 25))}</text>` : '');
+
+  // Cable from an output (x1, y1) to an input (x2, y2). early: drop to the target's height right after
+  // the output and run straight from there, under the adapter. The adapter badge sits near the output.
+  const wire = (x1, y1, x2, y2, label = '', l = null, { off = false, early = false } = {}) => {
+    const bend = early ? x1 + 40 : (x1 + x2) / 2;
+    const d = early ? `M${x1} ${y1} C${bend} ${y1} ${bend} ${y2} ${x1 + 80} ${y2} L${x2} ${y2}`
+      : `M${x1} ${y1} C${bend} ${y1} ${bend} ${y2} ${x2} ${y2}`;
+    wires.push(`<path d="${d}" fill="none" stroke="${off ? '#aaa' : '#000'}" stroke-width="1.4"${off ? ' stroke-dasharray="4 3"' : ''}/>`);
+    if (label) {   // in the middle of the cable, white outlined so it stays readable over other lines;
+      // below it when the cable goes down, so it never meets the adapter badge near the output
+      const [lx, ly] = early ? [(x1 + 80 + x2) / 2, y2] : [(x1 + x2) / 2, (y1 + y2) / 2];
+      const base = !early && y2 > y1 + 1 ? ly + 22 : ly - 14;
+      areas.push({ x: lx - label.length * 2.9, y: base - 9, w: label.length * 5.8, h: 11, text: true });
+      const bad = !off && short.has(cableName(label));
+      badges.push(`<text x="${lx}" y="${base}" font-size="10" text-anchor="middle" fill="${bad ? '#c00' : '#444'}"${bad ? ' font-weight="600"' : ''} stroke="#fff" stroke-width="3" paint-order="stroke">${esc(label)}</text>`);
+    }
+    if (!l?.adapter) return;
+    const text = l.adapter.replace(' (active converter)', ' active'), w = text.length * 5.6 + 12;
+    let cx, cy;
+    if (early) [cx, cy] = [x1 + 84 + w / 2, y2];
+    else {   // a point a third along the curve, but never over the output's box
+      const s = 0.3, u = 1 - s;
+      cx = Math.max(u ** 3 * x1 + 3 * u * s * bend + s ** 3 * x2, x1 + w / 2 + 4);
+      cy = u ** 3 * y1 + 3 * u * u * s * y1 + 3 * u * s * s * y2 + s ** 3 * y2;
+    }
+    const colour = short.has(l.adapter) ? '#c00' : '#000';
+    areas.push({ x: cx - w / 2, y: cy - 9, w, h: 18, text: true });
+    badges.push(`<rect x="${cx - w / 2}" y="${cy - 9}" width="${w}" height="18" rx="9" fill="#fff" stroke="${colour}" stroke-width="1.5"/>`,
+      `<text x="${cx}" y="${cy + 3.5}" font-size="9.5" text-anchor="middle" fill="${colour}" font-weight="600">${esc(text)}</text>`);
+  };
+  const svg = (W, H) => `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="12">${wires.join('')}${parts.join('')}${badges.join('')}</svg>`;
+  const hit = (a, b) => a.x < b.x + b.w + 1 && b.x < a.x + a.w + 1 && a.y < b.y + b.h + 1 && b.y < a.y + a.h + 1;
+  const overlaps = () => areas.some((a, i) => a.text && areas.some((b, j) => (b.text ? j > i : true) && j !== i && hit(a, b)));
+  return { box, wire, svg, overlaps };
+}
+
+// Lays a chart out wider and taller until no text overlaps another or a box (at most 3×).
+// Text keeps its size in the drawing, so on the page the chart shrinks proportionally.
+function fitted(draw) {
+  let chart;
+  for (let spread = 1; spread <= 3; spread *= 1.15) if (!(chart = draw(spread)).overlaps()) break;
+  return chart.svg;
+}
+
+// One wall: connection table rows, the flowchart as SVG, the adapters and splitters.
+function wallPlan(d, pool, short) {
+  const src = sourceOf(d), hw = adapterOf(d);
+  const wallInputs = hw.inputs, outType = q => hw.out[q];
+  const inputsOf = s => getPath(s, 'screen.inputs');
+  const on = q => project.screens.filter(s => s.src === `${d}.${q}`);
+  const full = on('full'), file = renders.find(r => r.name.startsWith(`videowall${d}.`))?.name ?? `videowall${d}.mp4`;
+  const source = `Video source ${d}`, adapter = `Video wall adapter ${d}`;
+  const srcType = src.type, srcOuts = Math.max(1, src.outs);
+  const rows = [], adapters = [];
+  const row = (from, port, to, l, note) => { rows.push([from, port, to, l.input, l.adapter, note]); if (l.adapter) adapters.push(l.adapter); };
+
+  // The source feeds the adapter and the full-frame monitors, one output each (all the same signal).
+  // More than it has outputs: its last output feeds a splitter for the rest.
+  const consumers = [{ name: adapter, inputs: wallInputs }, ...full.map(s => ({ name: `Monitor ${s.name}`, inputs: inputsOf(s), screen: s }))];
+  const direct = consumers.length <= srcOuts ? consumers : consumers.slice(0, srcOuts - 1);
+  const split = consumers.slice(direct.length);
+  const ms = split.length ? takeSplitter(pool, split.length, `Splitter ${d}`) : null;
+  const splitters = ms ? [ms] : [];
+  const splitLink = ms && link(srcType, [ms.input]);
+  consumers.forEach(c => c.link = link(direct.includes(c) ? srcType : ms.output, c.inputs));
+  const note = c => c.screen ? monitorNote(c.screen) : `plays ${file}`;
+  direct.forEach((c, i) => row(source, `out ${i + 1} · ${srcType}`, c.name, c.link, note(c)));
+  if (ms) {
+    row(source, `out ${srcOuts} · ${srcType}`, ms.label, splitLink, splitterNote(ms));
+    split.forEach((c, i) => row(ms.label, `out ${i + 1} · ${ms.output}`, c.name, c.link, note(c)));
+  }
+  const quadSplit = {};
+  for (const q of QUADS) {
+    const list = on(q), type = outType(q), port = `out ${outNumber(q)} · ${type}`;
+    if (!list.length) rows.push([adapter, port, '—', '', '', 'not connected']);
+    else if (list.length === 1) row(adapter, port, `Monitor ${list[0].name}`, link(type, inputsOf(list[0])), monitorNote(list[0]));
+    else {
+      const sp = quadSplit[q] = takeSplitter(pool, list.length, `Splitter ${d}·${outNumber(q)}`);
+      splitters.push(sp);
+      sp.inLink = link(type, [sp.input]);
+      row(adapter, port, sp.label, sp.inLink, splitterNote(sp));
+      list.forEach((s, i) => row(sp.label, `out ${i + 1} · ${sp.output}`, `Monitor ${s.name}`, link(sp.output, inputsOf(s)), monitorNote(s)));
+    }
+  }
+
+  // Columns that exist; monitors in rows: per quadrant at least one row, then the full-frame monitors.
+  const quadSplits = QUADS.some(q => on(q).length > 1);
+  const cols = ['source', ...(split.length ? ['split'] : []), 'adapter', ...(quadSplits ? ['qsplit'] : []), 'monitor'];
+  const svg = fitted(spread => {
+    const BW = 150, BH = 40, ROW = 52 * spread, W = 1200 * spread, colX = c => 10 + cols.indexOf(c) * (W - 20 - BW) / (cols.length - 1);
+    let r = 0;
+    const groups = QUADS.map(q => { const g = { q, list: on(q), first: r }; r += Math.max(1, g.list.length); g.last = r - 1; return g; });
+    const fullFirst = r; r += full.length;
+    const rowY = i => 14 + i * ROW, mid = g => (rowY(g.first) + rowY(g.last)) / 2;
+    const H = rowY(r - 1) + BH + 14;
+    const port = (top, i, n) => top + BH * (i + 1) / (n + 1);   // output i of n on a box's right edge
+
+    const { box, wire, svg: chartSvg, overlaps } = flowchart(BW, BH, short);
+    const warn = name => short.has(name) ? 'warn' : '';
+    const monitor = (s, y, l) => box(colX('monitor'), y, BH, `Monitor ${s.name} · ${l.input}`, monitorNote(s), warn(monitorKind(s)));
+
+    const adapterTop = rowY(groups[0].first), adapterH = rowY(groups[3].last) + BH - adapterTop;
+    const adapterMid = adapterTop + adapterH / 2, centre = H / 2 - BH / 2;
+    const target = c => c.screen ? [colX('monitor'), rowY(fullFirst + full.indexOf(c.screen)) + BH / 2] : [colX('adapter'), adapterMid];
+    const used = direct.length + (split.length ? 1 : 0);
+    box(colX('source'), centre, BH, source, `${src.name} · ${file}`, warn(src.name));
+    full.forEach((s, i) => monitor(s, rowY(fullFirst + i), consumers[i + 1].link));
+    direct.forEach((c, i) => wire(colX('source') + BW, port(centre, i, used), ...target(c), `out ${i + 1} · ${srcType}`, c.link, { early: !!c.screen }));
+    if (split.length) {
+      // At the height of the full-frame monitors it feeds, so their cables run under the adapter.
+      const ys = split.filter(c => c.screen).map(c => target(c)[1]);
+      const splitY = ys.length ? (ys[0] + ys.at(-1)) / 2 - BH / 2 : centre;
+      box(colX('split'), splitY, BH, ms.label, ms.name, warn(ms.name));
+      wire(colX('source') + BW, port(centre, used - 1, used), colX('split'), splitY + BH / 2, `out ${srcOuts} · ${srcType}`, splitLink);
+      split.forEach((c, i) => wire(colX('split') + BW, port(splitY, i, split.length), ...target(c), `out ${i + 1} · ${ms.output}`, c.link, { early: !!c.screen }));
+    }
+    box(colX('adapter'), adapterTop, adapterH, adapter, hw.name, warn(hw.name));
+
+    for (const g of groups) {
+      const portY = mid(g) + BH / 2, from = colX('adapter') + BW, type = outType(g.q), label = `out ${outNumber(g.q)} · ${type}`;
+      if (!g.list.length) {
+        box(colX('monitor'), rowY(g.first), BH, 'not connected', '', 'off');
+        wire(from, portY, colX('monitor'), portY, label, null, { off: true });
+      } else if (g.list.length === 1) {
+        const l = link(type, inputsOf(g.list[0]));
+        monitor(g.list[0], rowY(g.first), l);
+        wire(from, portY, colX('monitor'), portY, label, l);
+      } else {
+        const sx = colX('qsplit'), sp = quadSplit[g.q];
+        box(sx, mid(g), BH, sp.label, sp.name, warn(sp.name));
+        wire(from, portY, sx, portY, label, sp.inLink);
+        g.list.forEach((s, i) => {
+          const y = rowY(g.first + i), l = link(sp.output, inputsOf(s));
+          monitor(s, y, l);
+          wire(sx + BW, port(mid(g), i, g.list.length), colX('monitor'), y + BH / 2, `out ${i + 1} · ${sp.output}`, l);
+        });
+      }
+    }
+    return { svg: chartSvg(W, H), overlaps };
+  });
+  const inventory = `Video source: ${src.name} (${srcOuts}× ${srcType}) · adapter: ${hw.name} (in ${wallInputs.join(', ')})`;
+  return { title: `Video wall ${d} · cabling`, rows, svg, adapters, splitters, hardware: inventory };
+}
+
+// A hardware source feeding monitors directly (it plays its own content): source → (splitter) → monitors.
+function directPlan(i, pool, short) {
+  const src = project.hardware.sources[i], source = src.name, outs = Math.max(1, src.outs);
+  const screens = project.screens.filter(s => s.src === `src.${i}`);
+  const rows = [], adapters = [];
+  const row = (from, port, to, l, note) => { rows.push([from, port, to, l.input, l.adapter, note]); if (l.adapter) adapters.push(l.adapter); };
+  const inputsOf = s => getPath(s, 'screen.inputs');
+  const direct = screens.length <= outs ? screens : screens.slice(0, outs - 1);
+  const split = screens.slice(direct.length);
+  const sp = split.length ? takeSplitter(pool, split.length, `Splitter ${source}`) : null;
+  const spLink = sp && link(src.type, [sp.input]);
+  const linkOf = s => link(direct.includes(s) ? src.type : sp.output, inputsOf(s));
+  direct.forEach((s, k) => row(source, `out ${k + 1} · ${src.type}`, `Monitor ${s.name}`, linkOf(s), monitorNote(s)));
+  if (sp) {
+    row(source, `out ${outs} · ${src.type}`, sp.label, spLink, splitterNote(sp));
+    split.forEach((s, k) => row(sp.label, `out ${k + 1} · ${sp.output}`, `Monitor ${s.name}`, linkOf(s), monitorNote(s)));
+  }
+
+  const chart = fitted(spread => {
+    const BW = 150, BH = 40, ROW = 52 * spread, W = 1200 * spread;
+    const cols = ['source', ...(sp ? ['split'] : []), 'monitor'], colX = c => 10 + cols.indexOf(c) * (W - 20 - BW) / (cols.length - 1);
+    const rowY = k => 14 + k * ROW, H = rowY(screens.length - 1) + BH + 14, centre = H / 2 - BH / 2;
+    const port = (top, k, n) => top + BH * (k + 1) / (n + 1);
+    const { box, wire, svg, overlaps } = flowchart(BW, BH, short);
+    const warn = name => short.has(name) ? 'warn' : '';
+    const used = direct.length + (sp ? 1 : 0);
+    box(colX('source'), centre, BH, source, `${outs}× ${src.type}`, warn(source));
+    screens.forEach((s, k) => box(colX('monitor'), rowY(k), BH, `Monitor ${s.name} · ${linkOf(s).input}`, monitorNote(s), warn(monitorKind(s))));
+    direct.forEach((s, k) => wire(colX('source') + BW, port(centre, k, used), colX('monitor'), rowY(k) + BH / 2, `out ${k + 1} · ${src.type}`, linkOf(s)));
+    if (sp) {
+      const splitY = (rowY(direct.length) + rowY(screens.length - 1)) / 2;
+      box(colX('split'), splitY, BH, sp.label, sp.name, warn(sp.name));
+      wire(colX('source') + BW, port(centre, used - 1, used), colX('split'), splitY + BH / 2, `out ${outs} · ${src.type}`, spLink);
+      split.forEach((s, k) => wire(colX('split') + BW, port(splitY, k, split.length), colX('monitor'), rowY(direct.length + k) + BH / 2, `out ${k + 1} · ${sp.output}`, linkOf(s)));
+    }
+    return { svg: svg(W, H), overlaps };
+  });
+  return { title: `${source} · cabling`, rows, svg: chart, adapters, splitters: sp ? [sp] : [],
+    hardware: `Video source: ${source} (${outs}× ${src.type}) · ${project.clips[`src.${i}`]
+      ? `plays ${project.clips[`src.${i}`].file}, copied as ${directName(i)}.*` : `plays its stand-in ${directName(i)}.png`}` };
+}
+
+// Every wall, then every directly used source; all take splitters from the same hardware list.
+// short: materials short in stock, drawn red.
+function cablingPlans(short = new Map()) {
+  const pool = project.hardware.splitters.map(s => ({ ...s, left: s.count }));
+  const plans = Array.from({ length: wallCount() }, (_, k) => wallPlan(k + 1, pool, short));
+  project.hardware.sources.forEach((s, i) => { if (project.screens.some(x => x.src === `src.${i}`)) plans.push(directPlan(i, pool, short)); });
+  return plans;
+}
+
+// What the plans use, per section: [title, [[name, pieces, note]]].
+function materials(plans) {
+  const hw = project.hardware;
+  const group = list => Object.entries(list.reduce((n, k) => ({ ...n, [k]: (n[k] ?? 0) + 1 }), {}));
+  const monitors = {};
+  for (const s of project.screens) if (s.src !== 'none') (monitors[monitorKind(s)] ??= []).push(s.name);
+  return [
+    ['Video sources', group([...project.walls.map((_, k) => sourceOf(k + 1).name),
+      ...hw.sources.filter((_, i) => project.screens.some(s => s.src === `src.${i}`)).map(s => s.name)])],
+    ['Video wall adapters', group(project.walls.map((_, k) => adapterOf(k + 1).name))],
+    ['Splitters', group(plans.flatMap(p => p.splitters.map(s => s.name)))],
+    ['Monitors', Object.entries(monitors).map(([kind, names]) => [kind, names.length, names.join(', ')])],
+    ['Cables', group(plans.flatMap(p => p.rows.filter(r => r[2] !== '—').map(r => cableName(r[1]))))],
+    ['Cable adapters', group(plans.flatMap(p => p.adapters))],
+  ];
+}
+
+// Stock per material name, -1 (default) = unlimited.
+const stockOf = name => project.hardware.stock?.[name] ?? -1;
+const missingOf = (name, n) => stockOf(name) < 0 ? 0 : Math.max(0, n - stockOf(name));
+// Materials with less in stock than used: name → pieces missing.
+const shortStock = plans => new Map(materials(plans).flatMap(([, lines]) =>
+  lines.map(([name, n]) => [name, missingOf(name, n)])).filter(([, m]) => m));
+
+// What to have: grouped, with counts; what the stock lacks in red.
+function materialHtml() {
+  const external = project.screens.filter(s => s.src === 'none').map(s => s.name);
+  const line = ([name, n, note = '']) => {
+    const missing = missingOf(name, n), state = missing ? `${missing} missing` : 'in stock';
+    return `<div class="mat${missing ? ' warn' : ''}"><span>${esc(name)}<small>${esc(note ? `${note} · ${state}` : state)}</small></span>
+      <input type="number" class="stock" min="-1" step="1" value="${stockOf(name)}" data-stock="${esc(name)}" title="in stock, -1 = unlimited"><b>${n} pcs</b></div>`;
+  };
+  return `<h3>Materials used</h3>${materials(cablingPlans()).map(([title, lines]) => `<h3>${title}</h3>
+    ${lines.map(line).join('') || '<p class="hint">none</p>'}
+    ${title === 'Monitors' && external.length ? `<p class="hint">not connected: ${esc(external.join(', '))}</p>` : ''}`).join('')}
+    <p class="hint">Click a screen, or a video wall in the strip.</p>`;
+}
+
+function printCabling() {
+  const external = project.screens.filter(s => s.src === 'none').map(s => esc(s.name)).join(', ');
+  const short = shortStock(cablingPlans());
+  const shortText = [...short].map(([name, n]) => `${n}× ${esc(name)}`).join(', ');
+  const pages = cablingPlans(short).map(({ title, rows, svg, adapters, hardware }) => {
+    const counts = Object.entries(adapters.reduce((n, a) => ({ ...n, [a]: (n[a] ?? 0) + 1 }), {}));
+    // Red: the port's cable or the adapter, if short in stock.
+    const bad = (r, i) => (i === 1 && r[2] !== '—' && short.has(cableName(r[1]))) || (i === 4 && short.has(r[4]));
+    return `<section><h1>${esc(title)}</h1><p class="foot">${esc(hardware)}</p>${svg}
+      <table><tr><th>from</th><th>port</th><th>to</th><th>input</th><th>adapter</th><th>note</th></tr>
+      ${rows.map(r => `<tr>${r.map((c, i) => `<td${bad(r, i) ? ' class="bad"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</table>
+      <p><b>Adapters needed:</b> ${counts.length ? counts.map(([a, n]) => `${n}× ${esc(a)}`).join(', ') : 'none'}</p>
+      ${shortText ? `<p class="miss"><b>Missing in stock (all walls):</b> ${shortText}</p>` : ''}
+      ${external ? `<p class="foot">Not connected: ${external}</p>` : ''}</section>`;
+  });
+  const win = window.open('', '_blank');
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Video wall cabling</title><style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body { margin: 0; font: 9pt system-ui, sans-serif; color: #000; }
+    section { break-after: page; }
+    section:last-child { break-after: auto; }
+    h1 { font-size: 15pt; margin: 0 0 3mm; }
+    table { border-collapse: collapse; width: 100%; margin-top: 4mm; }
+    th, td { border: 0.5pt solid #999; padding: 1mm 1.6mm; text-align: left; vertical-align: top; }
+    th { background: #eee; }
+    td.bad { color: #c00; font-weight: 600; }
+    svg { display: block; width: 100%; height: auto; max-height: 112mm; }
+    .foot { color: #555; margin: 0 0 3mm; }
+    .miss { color: #c00; }
+  </style></head><body>${pages.join('')}<script>onload = () => print();<\/script></body></html>`);
+  win.document.close();
+}
+
+// ------------------------------------------------------------------ loop
+
+function frame(now) {
+  if (playing) t += (now - last) / 1000;
+  last = now;
+  if (project) {
+    drawWall();
+    $('#time').textContent = `${(t % total()).toFixed(2)} / ${total().toFixed(2)} s`;
+    if (document.activeElement !== $('#scrub')) $('#scrub').value = t % total() / total();
+    const head = $('#inspector .head'), screen = selectedScreen();
+    if (head && screen) {
+      const clip = project.clips[screen.src], times = scrub?.key === screen.src ? { main: scrub.time } : clipTimes(screen.src, clip, t);
+      if (times) head.style.left = `${times.main / media[clip.file].duration * 100}%`;
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ------------------------------------------------------------------ library
+
+function renderLibrary() {
+  const list = $('#mediaList');
+  list.innerHTML = '';
+  for (const [name, m] of Object.entries(media)) {
+    if (project.hidden?.includes(name)) continue;
+    const item = document.createElement('div');
+    item.className = 'item'; item.draggable = true;
+    const thumb = m.kind === 'image' ? new Image() : makeVideo(m.url + '#t=1');
+    if (m.kind === 'image') thumb.src = m.url; else thumb.preload = 'metadata';
+    const meta = m.kind === 'image' ? `${m.width}×${m.height}` : `${m.duration.toFixed(1)} s · ${m.width}×${m.height}`;
+    item.append(thumb);
+    item.insertAdjacentHTML('beforeend', `<div style="min-width:0"><span></span><small>${meta}${m.proxyPending ? ' · proxy…' : ''}</small></div>`);
+    item.querySelector('span').textContent = name;
+    item.title = name;
+    item.ondragstart = e => e.dataTransfer.setData('text/x-media', name);
+    item.insertAdjacentHTML('beforeend', '<button class="del" title="remove from the list (the file stays in _content)">×</button>');
+    item.querySelector('.del').onclick = () => removeMedia(name);
+    list.append(item);
+  }
+}
+
+// Off the list only, the file stays in _content; dropping it again brings it back.
+function removeMedia(name) {
+  const using = Object.keys(project.clips).filter(k => project.clips[k].file === name);
+  for (const k of using) delete project.clips[k];
+  project.hidden = [...(project.hidden ?? []), name];
+  const where = using.length ? `, taken off ${using.map(srcLabel).join(', ')}` : '';
+  renderLibrary(); renderInspector(); changed(); status(`removed ${name} from the list${where}`);
+}
+
+async function refreshMedia() {
+  const r = await api('/api/media');
+  const before = JSON.stringify(media);
+  media = r.media; setRenders(r.renders);
+  if (JSON.stringify(media) !== before) { renderLibrary(); renderInspector(); changed(); }
+}
+setInterval(() => { if (Object.values(media).some(m => m.proxyPending)) refreshMedia(); }, 3000);
+
+async function upload(files) {
+  const form = new FormData();
+  for (const f of files) form.append('files', f);
+  status(`uploading ${files.length} file(s)…`);
+  const r = await api('/api/upload', form);
+  project.hidden = (project.hidden ?? []).filter(n => !r.names.includes(n));
+  media = r.media; renderLibrary(); changed(); status(`added ${r.names.join(', ')}`);
+  return r.names;
+}
+
+function assign(screen, name) {
+  if (!takesClip(screen.src)) { status(`${screen.name} is external, set its source first`, true); return; }
+  const m = media[name], old = project.clips[screen.src] ?? {};
+  project.clips[screen.src] = {
+    mode: 'loop', xfade: 1, fit: 'cover', ...old,
+    file: name, in: 0, out: m.kind === 'image' ? 0 : Math.min(m.duration, 10),
+  };
+  selected = screen.id;
+  renderInspector(); changed();
+}
+
+// ------------------------------------------------------------------ inspector
+
+const selectedScreen = () => project.screens.find(s => s.id === selected);
+
+function sourceOptions(current) {
+  const options = ['none'];
+  for (let d = 1; d <= wallCount(); d++) options.push(...QUADS.map(q => `${d}.${q}`), `${d}.full`);
+  options.push(...project.hardware.sources.map((_, i) => `src.${i}`));
+  return options.map(o => `<option ${o === current ? 'selected' : ''} value="${o}">${o === 'none' ? 'external / off' : srcLabel(o)}</option>`).join('');
+}
+
+function field(label, path, type = 'text', extra = '') {
+  return `<div class="row"><label>${label}</label><input type="${type}" data-bind="${path}" ${extra}></div>`;
+}
+function select(label, path, options) {
+  return `<div class="row"><label>${label}</label><select data-bind="${path}">${options.map(o => `<option>${o}</option>`).join('')}</select></div>`;
+}
+
+function renderInspector() {
+  const box = $('#inspector'), screen = selectedScreen();
+  $('#hardware').classList.toggle('on', showHardware);
+  if (showHardware) return renderHardware(box);
+  if (selectedWall) {
+    const wall = project.walls[selectedWall - 1];
+    const options = list => list.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('');
+    box.innerHTML = `<h3>Video wall ${selectedWall}</h3>
+      ${field('loop', 'wall.length', 'number', 'min="0" step="0.5" title="seconds, 0 = auto (least common multiple of its clips)"')}
+      <div class="row"><label>source</label><select data-bind="wall.source" data-number>${options(project.hardware.sources)}</select></div>
+      <div class="row"><label>adapter</label><select data-bind="wall.adapter" data-number>${options(project.hardware.adapters)}</select></div>
+      <p class="hint">Plays videowall${selectedWall}.*. Sources, adapters and splitters are defined under Hardware.</p>
+      ${shortages().map(s => `<p class="warn">${esc(s)}</p>`).join('')}`;
+    bindFields(box, { wall });
+    return;
+  }
+  if (!screen) {
+    box.innerHTML = materialHtml();
+    box.querySelectorAll('[data-stock]').forEach(el => el.onchange = () => {
+      (project.hardware.stock ??= {})[el.dataset.stock] = Number(el.value);
+      renderInspector(); changed();
+    });
+    return;
+  }
+  const clip = project.clips[screen.src], m = clip && media[clip.file];
+  let html = `<h3>Screen</h3>
+    ${field('name', 'screen.name')}
+    <div class="row"><label>source</label><select data-bind="screen.src">${sourceOptions(screen.src)}</select></div>
+    ${field('aspect', 'screen.aspect', 'text', 'list="aspects" title="of the visible picture, e.g. 16:9, 4:3, 5:4"')}
+    <datalist id="aspects"><option>16:9<option>16:10<option>4:3<option>5:4<option>21:9</datalist>
+    ${isQuad(screen.src) ? `<div class="row"><label>stretch</label><input type="checkbox" data-bind="screen.stretch"
+      title="pre-stretch the content so this monitor's squeeze undoes it"></div>` : ''}
+    ${chips('inputs', 'screen.inputs')}`;
+
+  if (screen.src.endsWith('.full'))
+    html += `<p class="hint">Mirrors the whole output of video wall ${screen.src[0]}. A clip here fills all its quadrants that have no clip of their own.</p>`;
+
+  if (clip) {
+    html += `<h3>Content</h3>
+      <div class="file"><span title="${clip.file}"></span><button data-action="clear" title="⌫">×</button></div>`;
+    if (!m) html += `<p class="warn">missing in _content</p>`;
+    else if (screen.src.startsWith('src.'))
+      html += `<p class="hint">Plays the whole file, looping. Render videos copies it as ${directName(screen.src.slice(4))}.*</p>`;
+    else if (m.kind === 'video') {
+      html += `<div class="track"><div class="sel"></div><div class="head"></div></div>
+        <div class="row"><label>in / out</label><input type="number" data-bind="clip.in" step="0.04" min="0">
+        <input type="number" data-bind="clip.out" step="0.04" min="0"></div>
+        ${select('loop', 'clip.mode', ['loop', 'pingpong', 'xfade'])}
+        ${clip.mode === 'xfade' ? field('crossfade', 'clip.xfade', 'number', 'step="0.1" min="0.04"') : ''}
+        ${clip.mode === 'pingpong' ? '<p class="hint">Pingpong holds the clip in RAM while rendering, keep it short. Reverse plays choppy in the previz only.</p>' : ''}`;
+    }
+    html += `${select('fit', 'clip.fit', ['cover', 'contain', 'stretch'])}
+      <div class="row"><label>plan</label><span id="planInfo"></span></div>`;
+  } else if (takesClip(screen.src)) {
+    html += `<p class="hint">Drag media here.</p>`;
+  }
+  if (layoutMode) html += `<h3>Layout</h3><button data-action="delete">Delete screen</button>`;
+
+  box.innerHTML = html;
+  box.querySelector('.file span')?.append(clip.file);
+  bindFields(box, { screen, clip });
+  if (m?.kind === 'video') bindTrack(box.querySelector('.track'), clip, m, screen.src);
+  showPlan();
+}
+
+const NEW_HARDWARE = {
+  sources: { name: 'video source', count: 1, outs: 1, type: 'Micro HDMI' },
+  adapters: { name: '2x2 video wall adapter', count: 1, inputs: ['HDMI'], out: { tl: 'HDMI', tr: 'HDMI', bl: 'HDMI', br: 'HDMI' } },
+  splitters: { name: 'HDMI splitter 1x2', count: 1, outs: 2, input: 'HDMI', output: 'HDMI' },
+};
+
+// The hardware there is: walls pick their source and adapter from it, the cabling plan its splitters.
+function renderHardware(box) {
+  const hw = project.hardware;
+  const card = (kind, i, body) => `<div class="hw"><div class="row"><input data-bind="h.${kind}.${i}.name">
+    <button data-remove="${kind}" data-index="${i}" title="remove">×</button></div>${body}</div>`;
+  const num = (label, path, min) => `<div class="row"><label>${label}</label><input type="number" min="${min}" step="1" data-bind="${path}"></div>`;
+  box.innerHTML = `<h3>Video sources</h3>
+    ${hw.sources.map((s, i) => card('sources', i, num('count', `h.sources.${i}.count`, 0) + num('outputs', `h.sources.${i}.outs`, 1) + select('type', `h.sources.${i}.type`, PORT_TYPES))).join('')}
+    <button data-add="sources">+ video source</button>
+    <h3>Video wall adapters</h3>
+    ${hw.adapters.map((a, i) => card('adapters', i, num('count', `h.adapters.${i}.count`, 0) + chips('inputs', `h.adapters.${i}.inputs`)
+      + QUADS.map(q => select(`out ${outNumber(q)}`, `h.adapters.${i}.out.${q}`, PORT_TYPES)).join(''))).join('')}
+    <button data-add="adapters">+ video wall adapter</button>
+    <h3>Splitters</h3>
+    ${hw.splitters.map((s, i) => card('splitters', i, num('count', `h.splitters.${i}.count`, 0) + num('outputs', `h.splitters.${i}.outs`, 2)
+      + select('in', `h.splitters.${i}.input`, PORT_TYPES) + select('out', `h.splitters.${i}.output`, PORT_TYPES))).join('')}
+    <button data-add="splitters">+ splitter</button>
+    <p class="hint">A monitor can hang on a source directly (its source "direct · …"), e.g. a Pi playing its own
+    content. Each video wall picks its source and adapter (click it in the strip). The cabling plan takes
+    splitters from this list where it needs them: the smallest free one with enough outputs.</p>`;
+  bindFields(box, { h: hw });
+  box.querySelectorAll('[data-add]').forEach(b => b.onclick = () => {
+    hw[b.dataset.add].push(structuredClone(NEW_HARDWARE[b.dataset.add])); renderInspector(); changed();
+  });
+  box.querySelectorAll('[data-remove]').forEach(b => b.onclick = () => removeHardware(b.dataset.remove, +b.dataset.index));
+}
+
+// Sources and adapters used more often than there are: each wall uses one of its source and adapter,
+// a source feeding monitors directly one more.
+function shortages() {
+  const hw = project.hardware, used = { sources: hw.sources.map(() => 0), adapters: hw.adapters.map(() => 0) };
+  project.walls.forEach(w => { used.sources[w.source ?? 0]++; used.adapters[w.adapter ?? 0]++; });
+  hw.sources.forEach((_, i) => { if (project.screens.some(s => s.src === `src.${i}`)) used.sources[i]++; });
+  return ['sources', 'adapters'].flatMap(kind => hw[kind].flatMap((x, i) =>
+    used[kind][i] > (x.count ?? 1) ? [`${x.name}: ${used[kind][i]} used, ${x.count ?? 1} there`] : []));
+}
+
+// Walls using a removed source or adapter fall back to the first one.
+function removeHardware(kind, i) {
+  const list = project.hardware[kind];
+  if (kind !== 'splitters' && list.length === 1) return status('keep at least one', true);
+  list.splice(i, 1);
+  const key = { sources: 'source', adapters: 'adapter' }[kind];
+  if (key) for (const w of project.walls) { const v = w[key] ?? 0; w[key] = v === i ? 0 : v > i ? v - 1 : v; }
+  if (kind === 'sources') for (const s of project.screens) {
+    const [d, q] = s.src.split('.');
+    if (d === 'src') s.src = +q === i ? 'none' : +q > i ? `src.${q - 1}` : s.src;
+  }
+  renderInspector(); changed();
+}
+
+function toggleHardware() {
+  showHardware = !showHardware;
+  if (showHardware) selected = selectedWall = null;
+  renderInspector();
+}
+
+function chips(label, path) {
+  return `<div class="row"><label>${label}</label><div class="chips" data-chips="${path}">${
+    PORT_TYPES.map(p => `<button data-port="${p}">${p}</button>`).join('')}</div></div>`;
+}
+
+function bindFields(box, roots) {
+  box.querySelectorAll('[data-bind]').forEach(el => {
+    const value = getPath(roots[el.dataset.bind.split('.')[0]], el.dataset.bind);
+    if (el.type === 'checkbox') el.checked = !!value; else el.value = value ?? '';
+    el.addEventListener('input', () => {
+      const path = el.dataset.bind;
+      const v = el.type === 'checkbox' ? el.checked : el.type === 'number' || 'number' in el.dataset ? Number(el.value) : el.value;
+      setPath(roots[path.split('.')[0]], path, v);
+      if (path === 'clip.in' || path === 'clip.out') updateTrack();
+      changed();
+      if (el.tagName === 'SELECT') renderInspector();
+    });
+  });
+  // Port chips: toggle a type, at least one stays.
+  box.querySelectorAll('[data-chips]').forEach(group => {
+    const path = group.dataset.chips, root = roots[path.split('.')[0]];
+    const show = () => group.querySelectorAll('button').forEach(b => b.classList.toggle('on', getPath(root, path).includes(b.dataset.port)));
+    show();
+    group.onclick = e => {
+      const port = e.target.dataset.port, list = getPath(root, path);
+      const next = list.includes(port) ? list.filter(p => p !== port) : [...list, port];
+      if (!port || !next.length) return;
+      setPath(root, path, PORT_TYPES.filter(p => next.includes(p)));
+      show(); changed();
+    };
+  });
+  box.querySelectorAll('[data-action]').forEach(el => el.onclick = () => actions[el.dataset.action]());
+}
+
+function updateTrack() {
+  const screen = selectedScreen(), clip = screen && project.clips[screen.src], sel = $('#inspector .sel');
+  if (!sel) return;
+  const dur = media[clip.file].duration;
+  sel.style.left = `${clip.in / dur * 100}%`;
+  sel.style.width = `${(clip.out - clip.in) / dur * 100}%`;
+}
+
+// Drag near a handle moves in or out, elsewhere moves the whole selection.
+function bindTrack(track, clip, m, key) {
+  updateTrack();
+  track.onmousedown = e => {
+    const rect = track.getBoundingClientRect(), dur = m.duration;
+    const at = x => Math.min(dur, Math.max(0, (x - rect.left) / rect.width * dur));
+    const t0 = at(e.clientX), tolerance = dur * 10 / rect.width, length = clip.out - clip.in;
+    const part = Math.abs(t0 - clip.in) < tolerance ? 'in' : Math.abs(t0 - clip.out) < tolerance ? 'out' : 'move';
+    const start = { in: clip.in, out: clip.out };
+    const move = ev => {
+      const now = at(ev.clientX), minimum = 2 / fps();
+      if (part === 'in') clip.in = Math.min(now, clip.out - minimum);
+      else if (part === 'out') clip.out = Math.max(now, clip.in + minimum);
+      else { clip.in = Math.min(dur - length, Math.max(0, start.in + now - t0)); clip.out = clip.in + length; }
+      clip.in = +clip.in.toFixed(3); clip.out = +clip.out.toFixed(3);
+      scrub = { key, time: part === 'out' ? clip.out : clip.in };
+      $('#inspector [data-bind="clip.in"]').value = clip.in;
+      $('#inspector [data-bind="clip.out"]').value = clip.out;
+      updateTrack();
+    };
+    const up = () => { scrub = null; removeEventListener('mousemove', move); removeEventListener('mouseup', up); changed(); };
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+    move(e);
+  };
+}
+
+function showPlan() {
+  if (!plan) return;
+  const el = $('#planText');
+  const walls = Object.entries(plan.walls);
+  const name = key => project.screens.find(s => s.src === key)?.name ?? srcLabel(key);
+  el.textContent = 'loop ' + walls.map(([d, w]) => `wall ${d} ${w.seconds.toFixed(2)} s${w.cut.length ? ` (cut: ${w.cut.map(name).join(', ')})` : ''}`).join(' · ');
+  el.classList.toggle('warn', walls.some(([, w]) => w.cut.length));
+  const info = $('#planInfo'), screen = selectedScreen(), pc = screen && plan.clips[screen.src];
+  if (info) info.textContent = !pc ? '' : pc.image ? 'still image'
+    : pc.loops % 1 ? `${pc.loops.toFixed(2)}× in the loop, cut off at the end` : `${pc.loops}× in the loop`;
+  if (info) info.className = pc?.loops % 1 ? 'warn' : '';
+}
+
+const actions = {
+  clear() { const s = selectedScreen(); delete project.clips[s.src]; renderInspector(); changed(); },
+  delete() { project.screens = project.screens.filter(s => s.id !== selected); selected = null; renderInspector(); changed(); },
+};
+
+// ------------------------------------------------------------------ render job
+
+function setRenders(list) {
+  renders = list;
+  for (let d = 1; d <= wallCount(); d++) {
+    const r = list.find(x => x.name === `videowall${d}.mp4` || x.name === `videowall${d}.png`);
+    const url = r && `/render/${r.name}?v=${r.mtime}`;
+    if (!r) delete renderVideos[d];
+    else if (renderVideos[d]?.dataset.url !== url) {
+      const el = r.name.endsWith('.png') ? new Image() : makeVideo(url);
+      if (el instanceof Image) el.src = url; else el.loop = true;
+      el.dataset.url = url; renderVideos[d] = el;
+    }
+  }
+  const any = Object.keys(renderVideos).length > 0;
+  $('#view').disabled = !any;
+  if (!any && view === 'rendered') toggleView();
+}
+
+function toggleView() {
+  view = view === 'live' ? 'rendered' : 'live';
+  $('#view').classList.toggle('on', view === 'rendered');
+  for (const v of Object.values(renderVideos)) if (view === 'live') v.pause?.();
+  for (const p of Object.values(players)) if (view === 'rendered') { p.a.pause?.(); p.b?.pause(); }
+}
+
+async function startJob(path, body) {
+  try { await api(path, body); } catch (e) { status(e.message, true); return; }
+  $('#render').disabled = true; $('#progress').style.display = 'block';
+  const poll = async () => {
+    const j = await api('/api/job');
+    $('#progress div').style.width = `${j.progress * 100}%`;
+    status(j.message, j.state === 'error');
+    if (j.state === 'running') return setTimeout(poll, 500);
+    $('#render').disabled = false; $('#progress').style.display = 'none';
+    setRenders(j.renders);
+  };
+  poll();
+}
+
+// ------------------------------------------------------------------ input
+
+function canvasPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return [(e.clientX - r.left) * devicePixelRatio, (e.clientY - r.top) * devicePixelRatio];
+}
+
+canvas.addEventListener('mousedown', e => {
+  const [px, py] = canvasPoint(e), s = hit(px, py);
+  const button = stripButtons.find(b => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h);
+  if (button?.add) return addWall();
+  if (button?.remove) return removeWall(button.remove);
+  if (button?.wall) { selectedWall = button.wall; selected = null; showHardware = false; renderInspector(); return; }
+  const badge = s && stretchBadge(s);
+  if (badge && px >= badge.x && px <= badge.x + badge.w && py >= badge.y && py <= badge.y + badge.h) {
+    s.stretch = !s.stretch; renderInspector(); changed(); return;
+  }
+  if (selected !== s?.id || selectedWall || showHardware) { selected = s?.id ?? null; selectedWall = null; showHardware = false; renderInspector(); }
+  if (!s) return;
+  const r = screenRect(s), b = BEZEL * viewBox.scale;
+  const corner = layoutMode && px > r.x + r.w + b - 14 * devicePixelRatio && py > r.y + r.h + b - 14 * devicePixelRatio;
+  drag = { kind: !layoutMode ? 'swap' : corner ? 'resize' : 'move', s, px, py, x: s.x, y: s.y, w: s.w, moved: false };
+});
+
+canvas.addEventListener('mousemove', e => { under = hit(...canvasPoint(e)); });
+canvas.addEventListener('mouseleave', () => { under = null; });
+
+addEventListener('mousemove', e => {
+  if (!drag) return;
+  const [px, py] = canvasPoint(e), dx = (px - drag.px) / viewBox.scale, dy = (py - drag.py) / viewBox.scale;
+  if (Math.hypot(px - drag.px, py - drag.py) > 4) drag.moved = true;
+  if (!drag.moved) return;
+  if (drag.kind === 'move') { drag.s.x = Math.round(drag.x + dx); drag.s.y = Math.round(drag.y + dy); }
+  else if (drag.kind === 'resize') drag.s.w = Math.max(8, Math.round(drag.w + dx));
+  else { const target = hit(px, py); hover = target && target !== drag.s ? target : null; }
+});
+
+addEventListener('mouseup', () => {
+  if (!drag) return;
+  if (drag.kind === 'swap' && hover && takesClip(hover.src) && takesClip(drag.s.src)) {
+    const a = project.clips[drag.s.src], b = project.clips[hover.src];
+    if (b) project.clips[drag.s.src] = b; else delete project.clips[drag.s.src];
+    if (a) project.clips[hover.src] = a; else delete project.clips[hover.src];
+    selected = hover.id; renderInspector(); changed();
+  } else if (drag.kind !== 'swap' && drag.moved) changed();
+  hover = null; drag = null;
+});
+
+const stage = $('#stage');
+stage.addEventListener('dragover', e => {
+  e.preventDefault();
+  stage.classList.toggle('dropping', e.dataTransfer.types.includes('Files'));
+  hover = hit(...canvasPoint(e));
+});
+stage.addEventListener('dragleave', () => { hover = null; stage.classList.remove('dropping'); });
+stage.addEventListener('drop', async e => {
+  e.preventDefault(); stage.classList.remove('dropping');
+  const target = hit(...canvasPoint(e)); hover = null;
+  const name = e.dataTransfer.getData('text/x-media') || (e.dataTransfer.files.length && (await upload(e.dataTransfer.files))[0]);
+  if (name && target) assign(target, name);
+});
+$('#library').addEventListener('dragover', e => e.preventDefault());
+$('#library').addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) upload(e.dataTransfer.files); });
+
+function togglePlay() {
+  playing = !playing; $('#play').textContent = playing ? '❚❚' : '▶';
+  if (!playing) for (const v of [...Object.values(players).flatMap(p => [p.a, p.b]), ...Object.values(renderVideos)]) v?.pause?.();
+}
+function togglePattern() {
+  settings().pattern = !settings().pattern; $('#pattern').classList.toggle('on', settings().pattern); changed();
+}
+function toggleLayout() {
+  layoutMode = !layoutMode; $('#layout').classList.toggle('on', layoutMode); $('#addScreen').hidden = !layoutMode; renderInspector();
+}
+
+$('#play').onclick = togglePlay;
+$('#layout').onclick = toggleLayout;
+$('#pattern').onclick = togglePattern;
+$('#view').onclick = toggleView;
+$('#cabling').onclick = printCabling;
+$('#hardware').onclick = toggleHardware;
+$('#render').onclick = async () => { await save(); startJob('/api/render', {}); };
+$('#scrub').oninput = e => { t = e.target.value * total(); };
+$('#addScreen').onclick = () => {
+  const id = 's' + Date.now();
+  const maxY = Math.max(...project.screens.map(s => s.y + screenH(s)));
+  project.screens.push({ id, name: 'new', x: 22, y: Math.round(maxY + 10), w: 40, aspect: '16:9', src: 'none' });
+  selected = id; renderInspector(); changed();
+};
+
+addEventListener('keydown', e => {
+  if (e.target.closest('input, select')) return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'l' || e.key === 'L') toggleLayout();
+  else if (e.key === 'p' || e.key === 'P') togglePattern();
+  else if ((e.key === 'r' || e.key === 'R') && !$('#view').disabled) toggleView();
+  else if (e.key === 'Escape') { selected = selectedWall = null; showHardware = false; renderInspector(); }
+  else if ((e.key === 'Backspace' || e.key === 'Delete') && selectedScreen()) {
+    e.preventDefault();
+    if (layoutMode) actions.delete(); else if (project.clips[selectedScreen().src]) actions.clear();
+  }
+});
+
+document.querySelectorAll('[data-setting]').forEach(el => {
+  el.addEventListener('change', () => {
+    const k = el.dataset.setting, s = settings();
+    if (k === 'size') [s.width, s.height] = el.value.split('x').map(Number);
+    else s[k] = Number(el.value);
+    renderInspector(); changed();
+  });
+});
+
+// ------------------------------------------------------------------ start
+
+(async () => {
+  const state = await api('/api/state');
+  ({ project, media, plan } = state);
+  document.querySelectorAll('[data-setting]').forEach(el => {
+    const s = settings();
+    el.value = el.dataset.setting === 'size' ? `${s.width}x${s.height}` : s[el.dataset.setting];
+  });
+  $('#pattern').classList.toggle('on', !!settings().pattern);
+  setRenders(state.renders);
+  renderLibrary(); renderInspector(); showPlan();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

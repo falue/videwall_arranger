@@ -1,0 +1,19 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Media and rendered output
+_content/
+_render/
+
+# User files and temp file
+wall.tmp
+wall.json

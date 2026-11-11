@@ -1,0 +1,242 @@
+{
+ "clips": {
+  "2.bl": {
+   "file": "badApple.mp4",
+   "fit": "cover",
+   "in": 0,
+   "mode": "loop",
+   "out": 10,
+   "xfade": 1
+  },
+  "2.br": {
+   "file": "bigBuckBunny.mp4",
+   "fit": "cover",
+   "in": 0,
+   "mode": "loop",
+   "out": 10,
+   "xfade": 1
+  },
+  "2.tl": {
+   "file": "Rick Astley - Never Gonna Give You Up (Official Music Video).mp4",
+   "fit": "cover",
+   "in": 0,
+   "mode": "loop",
+   "out": 10,
+   "xfade": 1
+  },
+  "2.tr": {
+   "file": "Rockwell Chrysler Turbo Encabulator-(480p) (1).mp4",
+   "fit": "cover",
+   "in": 0,
+   "mode": "loop",
+   "out": 10,
+   "xfade": 1
+  }
+ },
+ "hardware": {
+  "adapters": [
+   {
+    "count": 1,
+    "inputs": [
+     "HDMI"
+    ],
+    "name": "2x2 video wall adapter",
+    "out": {
+     "bl": "HDMI",
+     "br": "HDMI",
+     "tl": "HDMI",
+     "tr": "HDMI"
+    }
+   },
+   {
+    "count": 1,
+    "inputs": [
+     "HDMI"
+    ],
+    "name": "2x2 video wall adapter",
+    "out": {
+     "bl": "HDMI",
+     "br": "HDMI",
+     "tl": "HDMI",
+     "tr": "HDMI"
+    }
+   }
+  ],
+  "sources": [
+   {
+    "count": 1,
+    "name": "Raspberry Pi TV PLAYER 1",
+    "outs": 1,
+    "type": "Micro HDMI"
+   },
+   {
+    "count": 1,
+    "name": "Raspberry Pi TV PLAYER 2",
+    "outs": 1,
+    "type": "Micro HDMI"
+   },
+   {
+    "count": 1,
+    "name": "Raspberry Pi Gegensprechanlage",
+    "outs": 1,
+    "type": "Micro HDMI"
+   }
+  ],
+  "splitters": [
+   {
+    "count": 2,
+    "input": "HDMI",
+    "name": "HDMI splitter 1x4",
+    "output": "HDMI",
+    "outs": 4
+   }
+  ],
+  "stock": {
+   "Micro HDMI \u2192 HDMI": 0
+  }
+ },
+ "screens": [
+  {
+   "aspect": "16:9",
+   "id": "s1",
+   "name": "ROMAN screen",
+   "src": "1.tl",
+   "w": 45,
+   "x": 22,
+   "y": 4
+  },
+  {
+   "aspect": "4:3",
+   "id": "s3",
+   "inputs": [
+    "VGA"
+   ],
+   "name": "C",
+   "src": "1.bl",
+   "stretch": true,
+   "w": 36,
+   "x": 116,
+   "y": 1
+  },
+  {
+   "aspect": "4:3",
+   "id": "s4",
+   "inputs": [
+    "VGA"
+   ],
+   "name": "D",
+   "src": "1.br",
+   "stretch": false,
+   "w": 38,
+   "x": 158,
+   "y": 0
+  },
+  {
+   "aspect": "16:9",
+   "id": "s5",
+   "name": "E",
+   "src": "2.tl",
+   "w": 53,
+   "x": 22,
+   "y": 44
+  },
+  {
+   "aspect": "16:9",
+   "id": "s6",
+   "name": "F",
+   "src": "2.tr",
+   "w": 53,
+   "x": 81,
+   "y": 43
+  },
+  {
+   "aspect": "4:3",
+   "id": "s7",
+   "inputs": [
+    "VGA"
+   ],
+   "name": "Panasonic",
+   "src": "1.full",
+   "w": 35,
+   "x": 143,
+   "y": 43
+  },
+  {
+   "aspect": "16:9",
+   "id": "s8",
+   "name": "G",
+   "src": "2.bl",
+   "w": 50,
+   "x": 22,
+   "y": 87
+  },
+  {
+   "aspect": "16:9",
+   "id": "s9",
+   "name": "H",
+   "src": "2.br",
+   "w": 53,
+   "x": 81,
+   "y": 86
+  },
+  {
+   "aspect": "16:9",
+   "id": "s10",
+   "inputs": [
+    "DVI-D"
+   ],
+   "name": "Compaq",
+   "src": "1.full",
+   "w": 50,
+   "x": 140,
+   "y": 90
+  },
+  {
+   "aspect": "4:3",
+   "id": "s11",
+   "inputs": [
+    "VGA"
+   ],
+   "name": "A",
+   "src": "1.tl",
+   "stretch": true,
+   "w": 45,
+   "x": 22,
+   "y": 135
+  },
+  {
+   "aspect": "16:9",
+   "id": "s12",
+   "name": "CCTV-gegensprechanlage",
+   "src": "src.2",
+   "w": 58,
+   "x": 72,
+   "y": 136
+  },
+  {
+   "aspect": "16:9",
+   "id": "s13",
+   "name": "B",
+   "src": "1.tr",
+   "w": 60,
+   "x": 139,
+   "y": 134
+  }
+ ],
+ "settings": {
+  "crf": 18,
+  "fps": 25,
+  "height": 1080,
+  "maxLength": 0,
+  "pattern": false,
+  "tolerance": 5,
+  "width": 1920
+ },
+ "walls": [
+  {},
+  {
+   "length": 0,
+   "source": 1
+  }
+ ]
+}

@@ -41,7 +41,6 @@ DEFAULT_PROJECT = {
         "fps": 25,
         "width": 1920,
         "height": 1080,
-        "maxLength": 0,       # auto length never goes beyond this, 0 = always the longest clip
         "crf": 18,
     },
     # Position and width in free units (~cm), aspect of the visible picture.
@@ -60,7 +59,7 @@ DEFAULT_PROJECT = {
         {"id": "s12", "name": "CCTV", "x": 72, "y": 136, "w": 58, "aspect": "16:9", "src": "none"},
         {"id": "s13", "name": "B", "x": 139, "y": 134, "w": 60, "aspect": "16:9", "src": "1.tr"},
     ],
-    # Video walls: "source" and "adapter" index into the hardware list, "length" seconds (0 = auto).
+    # Video walls: "source" and "adapter" index into the hardware list, "length" max seconds (0 = longest clip).
     "walls": [{}, {}],
     # Content per adapter output, key "<video wall>.<quadrant>".
     "clips": {},
@@ -187,6 +186,10 @@ def load_project() -> dict:
                 wall.pop(key, None)
     for item in project["hardware"]["sources"] + project["hardware"]["adapters"]:
         item.setdefault("count", 1)   # how many of them there are, older files had none
+    cap = project["settings"].pop("maxLength", 0)   # older files: one max length for all walls
+    for wall in project["walls"]:
+        if not wall.get("length"):
+            wall["length"] = cap
     return project
 
 
@@ -208,12 +211,19 @@ def quad_aspect(project: dict, key: str) -> float:
     return s["width"] / s["height"]
 
 
+def output_format(project: dict, owner: dict) -> dict:
+    """fps, size and crf of a wall's file or a direct source's (owner): the common one, or its own."""
+    s = project["settings"]
+    own = {} if s.get("sameFormat", True) else owner.get("format", {})
+    return {key: own.get(key, s[key]) for key in ("fps", "width", "height", "crf")}
+
+
 def clip_frames(clip: dict, info: dict, fps: int) -> tuple[int, int, int]:
     """Source frames, frames of one loop unit and crossfade frames of a video clip."""
     end = min(clip.get("out") or info["duration"], info["duration"])
     source = max(2, round((end - clip.get("in", 0)) * fps))
     mode = clip.get("mode", "loop")
-    xfade = min(source // 2, max(1, round(clip.get("xfade", 1) * fps))) if mode == "xfade" else 0
+    xfade = min(source // 2, max(1, round(clip.get("xfade", 3) * fps))) if mode == "xfade" else 0
     unit = 2 * source - 2 if mode == "pingpong" else source - xfade
     return source, unit, xfade
 
@@ -222,15 +232,14 @@ def make_plan(project: dict, media: dict) -> dict:
     """
     Per video wall one length for its file. Clips always play at their own
     speed: the least common multiple of its clips, so all loop seamlessly, if
-    it is not longer than maxLength, else as long as its longest clip and the
-    others are cut off at the end. A wall's own length (seconds, 0 = auto)
-    overrides this.
+    it is not longer than the wall's max length, else as long as its longest
+    clip (at most the max length) and the others are cut off at the end.
+    Max length 0: always as long as the longest clip.
     """
-    s = project["settings"]
-    fps = s["fps"]
     walls, clips = {}, {}
 
     for wall, wall_settings in enumerate(project["walls"], 1):
+        fps = output_format(project, wall_settings)["fps"]
         videos, images = {}, []
         for key, clip in project["clips"].items():
             info = media.get(clip.get("file"))
@@ -242,14 +251,13 @@ def make_plan(project: dict, media: dict) -> dict:
                 videos[key] = clip_frames(clip, info, fps)
 
         units = [unit for _, unit, _ in videos.values()]
-        if wall_settings.get("length", 0) > 0:
-            total = max(1, round(wall_settings["length"] * fps))
-        elif not units:
-            total = 10 * fps
-        elif (common := math.lcm(*units)) <= s["maxLength"] * fps:
+        cap = round(wall_settings.get("length", 0) * fps)
+        if not units:
+            total = 10 * fps   # still images only
+        elif cap and (common := math.lcm(*units)) <= cap:
             total = common
         else:
-            total = max(units)
+            total = max(1, min(max(units), cap)) if cap else max(units)
 
         for key, (source, unit, xfade) in videos.items():
             clips[key] = {"source": source, "unit": unit, "xfade": xfade, "loops": total / unit}
@@ -384,8 +392,8 @@ def render_wall(project: dict) -> None:
     media = list_media()
     plan = make_plan(project, media)
     s = project["settings"]
-    fps = s["fps"]
-    width, height = s["width"] // 4 * 2, s["height"] // 4 * 2
+    sources = project["hardware"]["sources"]
+    formats = {d: output_format(project, wall) for d, wall in enumerate(project["walls"], 1)}
 
     missing = [c["file"] for c in project["clips"].values() if c.get("file") not in media]
     if missing:
@@ -397,18 +405,20 @@ def render_wall(project: dict) -> None:
 
     devices = range(1, len(project["walls"]) + 1)
     keys = [f"{d}.{q}" for d in devices for q in (*QUADS, "full") if f"{d}.{q}" in project["clips"]]
-    steps, step = len(keys) + len(devices) + 1, 0
+    direct_used = [i for i in range(len(sources)) if any(screen["src"] == f"src.{i}" for screen in project["screens"])]
+    steps, step = len(keys) + len(devices) + len(direct_used) + 1, 0
 
     units = {}
     for key in keys:
-        clip = project["clips"][key]
+        clip, device = project["clips"][key], int(key.split(".")[0])
+        f = formats[device]
         JOB["message"] = f"preparing {key} ({clip['file']})"
         units[key] = work / f"{key}.mp4"
-        scale = 2 if key.endswith(".full") else 1
-        wall_frames = plan["walls"][int(key.split(".")[0])]["frames"]
+        scale = 4 if key.endswith(".full") else 2   # quarters: whole frame or one quadrant, even sizes
+        wall_frames = plan["walls"][device]["frames"]
         run_ffmpeg(
-            unit_args(clip, media[clip["file"]], plan["clips"][key], width * scale, height * scale,
-                      quad_aspect(project, key), fps, wall_frames, units[key]),
+            unit_args(clip, media[clip["file"]], plan["clips"][key], f["width"] // 4 * scale, f["height"] // 4 * scale,
+                      quad_aspect(project, key), f["fps"], wall_frames, units[key]),
             plan["clips"][key].get("unit", wall_frames), step, steps,
         )
         step += 1
@@ -416,6 +426,8 @@ def render_wall(project: dict) -> None:
     outputs = {}
     for device in devices:
         JOB["message"] = f"rendering video wall {device}"
+        f = formats[device]
+        fps, width, height = f["fps"], f["width"] // 4 * 2, f["height"] // 4 * 2
         inputs, graph = [], []
 
         # Whole-device content shows wherever a quadrant has no clip of its own.
@@ -440,7 +452,7 @@ def render_wall(project: dict) -> None:
                 else:
                     inputs += ["-loop", "1", "-i", str(pattern)]
                 graph.append(f"[{inputs.count('-i') - 1}:v]scale={width}:{height},fps={fps},setsar=1[{quad}]")
-            if dropped and s.get("pattern"):
+            if dropped and s.get("renderPattern"):
                 inputs += ["-loop", "1", "-i", str(pattern)]
                 graph.append(f"[{inputs.count('-i') - 1}:v]scale={width}:{height},format=rgba,"
                              f"colorchannelmixer=aa={PATTERN_OPACITY}[p{quad}]")
@@ -454,36 +466,49 @@ def render_wall(project: dict) -> None:
         still = all(media[project["clips"][k]["file"]]["kind"] == "image" for k in keys if k.startswith(f"{device}."))
         outputs[device] = save_output(
             [*inputs, "-filter_complex", ";".join(graph), "-map", "[v]"],
-            f"videowall{device}", still, plan["walls"][device]["frames"], fps, s["crf"], "medium", work, step, steps,
+            f"videowall{device}", still, plan["walls"][device]["frames"], fps, f["crf"], "medium", work, step, steps,
         )
         step += 1
 
-    # Direct sources play their file as it is: copied, named after the source. Without one: its stand-in.
+    # Direct sources: their file copied unchanged or re-encoded, named after the source. Without one: its stand-in.
     direct, made = {}, []
-    for index, source in enumerate(project["hardware"]["sources"]):
-        key = f"src.{index}"
-        if not any(screen["src"] == key for screen in project["screens"]):
-            continue
-        stem = direct_name(source, index)
-        if key in project["clips"]:
-            file = CONTENT / project["clips"][key]["file"]
+    for index in direct_used:
+        source, key = sources[index], f"src.{index}"
+        stem, f = direct_name(source, index), output_format(project, source)
+        clip = project["clips"].get(key)
+        JOB["message"] = f"direct source {source['name']}"
+        if not clip:
+            target = RENDER / f"{stem}.png"
+            pattern_image(project, key, (f["width"], f["height"])).save(target)
+            made.append(f"{target.name} (stand-in)")
+        elif source.get("copy", True):
+            file = CONTENT / clip["file"]
             target = RENDER / (stem + file.suffix.lower())
             shutil.copyfile(file, target)
             made.append(f"{target.name} (copied)")
         else:
-            target = RENDER / f"{stem}.png"
-            pattern_image(project, key, (s["width"], s["height"])).save(target)
-            made.append(f"{target.name} (stand-in)")
+            info, (width, height) = media[clip["file"]], (f["width"] // 2 * 2, f["height"] // 2 * 2)
+            still = info["kind"] == "image"
+            fit = fit_filter(clip.get("fit", "cover"), width, height, width / height)
+            graph = f"[0:v]{fit}[v]" if still else f"[0:v]fps={f['fps']},{fit}[v]"
+            target = save_output(
+                ["-i", str(CONTENT / clip["file"]), "-filter_complex", graph, "-map", "[v]"],
+                stem, still, 1 if still else max(1, round(info["duration"] * f["fps"])),
+                f["fps"], f["crf"], "medium", work, step, steps,
+            )
+            made.append(f"{target.name} (re-encoded)")
         for old in RENDER.glob(f"{stem}.*"):   # an earlier file of another type
             if old != target:
                 old.unlink()
         direct[key] = target
+        step += 1
 
     JOB["message"] = "rendering wall preview"
     feeds = {str(d): o for d, o in outputs.items()} | direct
+    fps = s["fps"]
     preview = save_output(
         preview_args(project, feeds, fps), "wall_preview", all(media_kind(f) == "image" for f in feeds.values()),
-        max(w["frames"] for w in plan["walls"].values()), fps, 23, "veryfast", work, step, steps,
+        round(max(w["seconds"] for w in plan["walls"].values()) * fps), fps, 23, "veryfast", work, step, steps,
     )
 
     shutil.rmtree(work, ignore_errors=True)
